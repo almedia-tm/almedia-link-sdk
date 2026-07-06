@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Almedia Link SDK - Android dependencies (EDM4U manifest)
+
+    This file is for hosts that have EDM4U (External Dependency Manager for
+    Unity) installed: EDM4U auto-resolves it on save / before Android build,
+    no manual action needed.
+
+    Hosts WITHOUT EDM4U get the exact same dependencies automatically via the
+    Unity .androidlib subproject at:
+        Packages/com.almedia.link/Plugins/Android/AlmediaLink.androidlib/
+
+    Keep this file and AlmediaLink.androidlib/build.gradle in lockstep when
+    bumping versions. Pinned for Unity 2022.3 / AGP 7.x / D8 compatibility.
+-->
+<dependencies>
+    <androidPackages>
+        <!-- Kotlin coroutines -->
+        <androidPackage spec="org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"/>
+        <androidPackage spec="org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"/>
+
+        <!-- Kotlin serialization -->
+        <androidPackage spec="org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0"/>
+
+        <!-- AndroidX -->
+        <androidPackage spec="androidx.lifecycle:lifecycle-runtime-ktx:2.6.2"/>
+        <androidPackage spec="androidx.lifecycle:lifecycle-process:2.6.2"/>
+        <!-- 1.0.0 avoids byteArrayPreferencesKey (added in 1.1.0) and KMP multi-variant
+             metadata that breaks D8 dexing on AGP 7.1.2 -->
+        <androidPackage spec="androidx.datastore:datastore-preferences:1.0.0"/>
+    </androidPackages>
+</dependencies>

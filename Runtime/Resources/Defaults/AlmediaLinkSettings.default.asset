@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 63aacb8f55f4efc4694ab607b4066ee7, type: 3}
+  m_Name: AlmediaLinkSettings.default
+  m_EditorClassIdentifier: 
+  _iosIntegrationKey: 
+  _androidIntegrationKey: 
+  _notificationPollIntervalSeconds: 30
+  _enableDefaultNotificationUI: 1
+  _canRunConsentFlow: 0
+  _popupTitle: Get Rewarded While Playing
+  _benefit1Title: Earn real money & gift cards
+  _benefit1Description: Convert your Word Farm gameplay into rewards.
+  _benefit2Title: Earn up to $20
+  _benefit2Description: On Freecash for playing Word Farm.
+  _ctaButtonText: Link Your Freecash Account
+  _overlayTitle: Notifications
+  _popupBackgroundColor: {r: 0.078431375, g: 0.08235294, b: 0.13725491, a: 1}
+  _ctaButtonColor: {r: 0.003921569, g: 0.8392157, b: 0.4627451, a: 1}
+  _ctaButtonTextColor: {r: 0, g: 0, b: 0, a: 1}
+  _notificationBackgroundColor: {r: 0.07058824, g: 0.07058824, b: 0.07058824, a: 1}
+  _attPromptTitle: Don't miss your rewards by enabling app tracking
+  _attRewardAmount: $9.38
+  _attWhyTitle: Why do we need this?
+  _attWhyBody: Tracking lets us make sure your rewards can be credited correctly
+    and faster.
+  _attControlTitle: You're in control
+  _attControlBody: Change permissions at any time in Settings.
+  _attContinueButtonText: Continue
+  _attBackgroundColor: {r: 0.078431375, g: 0.08235294, b: 0.13725491, a: 1}
+  _attPrimaryButtonColor: {r: 0.003921569, g: 0.8392157, b: 0.4627451, a: 1}
+  _attButtonTextColor: {r: 1, g: 1, b: 1, a: 1}
