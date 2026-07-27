@@ -6,13 +6,16 @@ namespace AlmediaLink.Bridge
     {
         void Initialize(string json);
         void StartLinking(PlacementType placement = PlacementType.Popup);
+        void ShowRewardHub();
+        void ShowOffer();
+        void Engage();
         void FetchNotifications();
         void StartNotificationPolling();
         void StopNotificationPolling();
         void ContinueWithATT();
         void SkipATT();
         void TrackPromoLoad(PromoState state);
-        void TrackPromoClick();
+        void TrackPromoClick(PromoState state);
         void TrackPopupShow();
         void TrackPopupDismiss();
         void TrackPopupCtaClick();

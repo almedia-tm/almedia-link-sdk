@@ -17,14 +17,17 @@ This guide walks through integrating the Almedia Link SDK into a Unity game, fro
 9. [Status and lifecycle](#status-and-lifecycle)
 10. [Show the Link Button](#show-the-link-button)
 11. [The linking flow](#the-linking-flow)
-12. [Reward notifications](#reward-notifications)
-13. [iOS - App Tracking Transparency](#ios--app-tracking-transparency)
-14. [Android - Gradle dependencies](#android--gradle-dependencies)
-15. [Logging](#logging)
-16. [Error handling](#error-handling)
-17. [Crash symbolication](#crash-symbolication)
-18. [Editor and play mode](#editor-and-play-mode)
-19. [Troubleshooting](#troubleshooting)
+12. [Reward hub](#reward-hub)
+13. [Offers](#offers)
+14. [Pausing your game](#pausing-your-game)
+15. [Reward notifications](#reward-notifications)
+16. [iOS - App Tracking Transparency](#ios--app-tracking-transparency)
+17. [Android - Gradle dependencies](#android--gradle-dependencies)
+18. [Logging](#logging)
+19. [Error handling](#error-handling)
+20. [Crash symbolication](#crash-symbolication)
+21. [Editor and play mode](#editor-and-play-mode)
+22. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -42,7 +45,7 @@ The SDK is split into three layers:
 
 ## Threading
 
-Every public event on `AlmediaLinkSDK` - `OnStatusChanged`, `OnLinkCompleted`, `OnNotificationsReceived`, `OnErrorOccurred`, `OnLog` - fires on the **Unity main thread**. Handlers can touch `GetComponent`, `transform`, `UnityEngine.UI` elements, and any other Unity API directly.
+Every public event on `AlmediaLinkSDK` - `OnStatusChanged`, `OnLinkCompleted`, `OnNotificationsReceived`, `OnErrorOccurred`, `OnScreenPresented`, `OnScreenDismissed`, `OnLog` - fires on the **Unity main thread**. Handlers can touch `GetComponent`, `transform`, `UnityEngine.UI` elements, and any other Unity API directly.
 
 Internally, the native SDKs perform I/O off the main thread and post results back via `UnitySendMessage`, which Unity always delivers on the main thread. The editor mock bridge uses coroutines, which run on the main thread as well, so the threading contract is identical in the editor and on device.
 
@@ -54,13 +57,13 @@ Internally, the native SDKs perform I/O off the main thread and post results bac
 |------------------|-----------------|--------------------------|
 | Unity Editor     | 2022.3 LTS      | 2022.3.62f2              |
 | iOS              | 16.0            | 17.x, 18.x               |
-| Android API      | 27              | API 27-34                |
+| Android API      | 27              | API 27-36                |
 | TextMeshPro      | 3.0.6           | (declared as a dependency) |
 
 Additional requirements:
 
 - An **iOS integration key** and an **Android integration key** issued by Almedia.
-- For iOS builds that run the consent flow: a non-empty `NSUserTrackingUsageDescription` in the final `Info.plist`. The SDK can write a default value - see [iOS - App Tracking Transparency](#ios--app-tracking-transparency).
+- For iOS builds: a non-empty `NSUserTrackingUsageDescription` in the final `Info.plist` (required for ATT-gated IDFA reading). The SDK writes a default value on build - see [iOS - App Tracking Transparency](#ios--app-tracking-transparency).
 - For Android builds: `minSdkVersion 27` (or higher) in the Gradle template.
 
 The SDK ships with **zero third-party runtime dependencies on the Unity side**. The native plugins pull standard AndroidX and Kotlin libraries - see [Android - Gradle dependencies](#android--gradle-dependencies).
@@ -118,7 +121,6 @@ Open **Almedia → Settings**. The Settings window has five sections:
 | Android Integration Key        | Android  | empty   | Required for Android builds. |
 | Polling Interval (sec)         | no       | 30      | Frequency of notification polls when polling is enabled. Minimum 5. |
 | Enable Default Notification UI | no       | true    | When off, the SDK does not show its built-in notification card or activity overlay; host code receives `OnNotificationsReceived` and renders them. |
-| Enable Consent Flow (iOS ATT)  | no       | false   | When on, iOS runs the ATT pre-prompt and system dialog as part of init. See [iOS - App Tracking Transparency](#ios--app-tracking-transparency). |
 
 
 ---
@@ -129,7 +131,7 @@ The SDK ships with sensible defaults. Customization is available at three levels
 
 ### Level 1 - Text and colors
 
-**Almedia → Settings** exposes visible string and primary color on the link popup, notification card, activity overlay, and ATT pre-prompt. Edit those fields directly - the built-in prefabs read the settings asset and apply it **at runtime**. No code and no writable prefab are needed. To preview your changes, enter **Play mode** - the editor mock bridge drives the UI, so the popup, notification card, and overlay render with your settings.
+**Almedia → Settings** exposes visible string and primary color on the link popup, notification card, and activity overlay. Edit those fields directly - the built-in prefabs read the settings asset and apply it **at runtime**. No code and no writable prefab are needed. To preview your changes, enter **Play mode** - the editor mock bridge drives the UI, so the popup, notification card, and overlay render with your settings.
 
 > The settings asset is the **default layer**. A host runtime theming or localization system (Unity Localization Package's `LocalizeStringEvent`, dynamic theming, etc.) attached to a UI element still wins, because those components initialize *after* the SDK applies the settings. To customize a **replaced** prefab, see Level 2 - an assigned variant is authored directly and is not overlaid with these settings.
 
@@ -137,7 +139,7 @@ The SDK ships with sensible defaults. Customization is available at three levels
 
 For anything beyond text and primary colors (layout changes, custom fonts, additional elements, full re-skin):
 
-1. Right-click the default prefab in `Packages/com.almedia.link/Runtime/Resources/Prefabs/LinkPopup.prefab` (or `NotificationCard.prefab`, `ActivityOverlay.prefab`, `ATTPrePrompt.prefab`) and choose **Create → Prefab Variant**.
+1. Right-click the default prefab in `Packages/com.almedia.link/Runtime/Resources/Prefabs/LinkPopup.prefab` (or `NotificationCard.prefab`, `ActivityOverlay.prefab`) and choose **Create → Prefab Variant**.
 2. Save the variant into a host-owned folder, for example `Assets/UI/Almedia/MyLinkPopup.prefab`.
 3. Edit the variant freely. Keep the same root component (`LinkPopupController`, etc.); the SDK looks up serialized references on the root.
 4. **Almedia → Settings → Prefab Overrides** → assign the variant in the corresponding slot.
@@ -215,7 +217,6 @@ When `Initialize` runs, the SDK merges any supplied `config` with `AlmediaLinkSe
 |------------------------------------|----------------|
 | Integration key                    | `config.IosIntegrationKey` / `config.AndroidIntegrationKey` → settings asset |
 | `NotificationsPollingIntervalSec`  | config (if non-null) → settings → 30 |
-| `CanRunConsentFlow`                | config (if non-null) → settings → false |
 | `Gaid` / `Asid` / `Oaid` / `Idfa` / `Idfv` / `AdjustDeviceId` / `AppsFlyerId` / `AccountId` | config only (no settings fallback) |
 
 If neither the config nor the settings asset supplies an integration key, `Initialize` fires `OnErrorOccurred` with `AlmediaErrorCode.InvalidConfiguration` and does not contact the backend.
@@ -257,11 +258,15 @@ The simplest integration is dropping one of the four prebuilt button prefabs int
    - `LinkButtonC.prefab`
    - `LinkButtonD.prefab`
 2. Position it as desired.
-3. Press Play. The button stays hidden until the SDK status becomes `Eligible`. It hides itself again if the player completes linking, gets blocked, or becomes ineligible.
+3. Press Play. The button is two-state and stays visible as much as possible:
 
-Tapping the button opens the `LinkPopup`. The popup handles the rest of the linking flow.
+| Player status | Button | Tapping it |
+|---|---|---|
+| `Eligible` | visible - linking entry | opens the `LinkPopup` (which starts linking) |
+| `Linked` | visible - rewards entry | opens the reward hub |
+| anything else | hidden | - |
 
-For full control, ignore the prefabs and call `AlmediaLinkSDK.StartLinking()` from a custom button - see the next section.
+For full control, ignore the prefabs and drive it yourself - see [Trigger linking programmatically](#trigger-linking-programmatically) and [Reward hub](#reward-hub).
 
 ---
 
@@ -283,7 +288,13 @@ Linking page opens (Freecash)
 Player completes linking on linking page
         │
         ▼
-Status → Linked, OnLinkCompleted(linkedAt) fires
+Linking page closes; SDK syncs state (Status → Linked via OnStatusChanged)
+        │
+        ▼
+OnScreenDismissed(Linking) fires - resume your game
+        │
+        ▼
+OnLinkCompleted(linkedAt) fires - fresh-link celebration UX
 ```
 
 The bundled flow is fully wired: `LinkButton` opens `LinkPopup`, and the popup's CTA invokes `StartLinking()`. Host code only needs to drop a `LinkButton` prefab into a Canvas. To replace the popup with custom UI, see the next section.
@@ -327,6 +338,119 @@ AlmediaLinkSDK.OnLinkCompleted += linkedAt =>
 For a basic "is the player linked right now?" check - for example, to enable a menu item or update UI affordances - use `OnStatusChanged` and react when status reaches `Linked`. That fires for both fresh links and already-linked sessions.
 
 If linking fails or the player closes the linking page, `OnErrorOccurred` may fire with `AlmediaErrorCode.LinkingFailed`. Status stays `Eligible` so the player can try again.
+
+---
+
+## Reward hub
+
+Linked players have a reward progression screen - a webview showing what they have earned and what is next. Open it with:
+
+```csharp
+AlmediaLinkSDK.ShowRewardHub();
+```
+
+Calling this in any state is safe. The screen opens only for a linked player with a live progression URL; otherwise the call does nothing and the reason is logged through `OnLog`. Before the SDK is ready (the first `OnStatusChanged`), it no-ops with a warning.
+
+Only one in-app screen can be open at a time. A call made while another screen is already open is ignored with a log.
+
+### `Engage()`
+
+`AlmediaLinkSDK.Engage()` is a single call that does the state-appropriate thing:
+
+| Player state | What happens |
+|--------------|--------------|
+| `Eligible`   | linking starts |
+| `Linked`     | the reward hub opens |
+| anything else | nothing, with the reason logged |
+
+The routing happens on the native side, so `Engage()` stays correct as the player's state changes and you never branch on status yourself. That makes it the simplest way to wire your own button:
+
+```csharp
+// A custom button that does the right thing in every state.
+myButton.onClick.AddListener(() => AlmediaLinkSDK.Engage());
+
+AlmediaLinkSDK.OnStatusChanged += status =>
+    myButton.gameObject.SetActive(
+        status == AlmediaStatus.Eligible || status == AlmediaStatus.Linked);
+```
+
+On `Eligible`, `Engage()` starts linking **directly** - it does not open the bundled `LinkPopup`. If you want the popup, use the bundled Link Button prefab (see [Show the Link Button](#show-the-link-button)), or call `StartLinking()` from your own popup's CTA.
+
+### Screen lifecycle
+
+The reward hub reports its lifecycle through the unified screen events - see [Pausing your game](#pausing-your-game). The dismissal reports how it was closed:
+
+```csharp
+AlmediaLinkSDK.OnScreenDismissed += (screen, result) =>
+{
+    if (screen != AlmediaScreen.RewardHub) return;
+    switch (result.Type)
+    {
+        case InAppScreenResultType.Completed: // closed by the web client
+            break;
+        case InAppScreenResultType.Cancelled: // player closed it themselves
+            break;
+        case InAppScreenResultType.Failed:    // the screen could not load
+            Debug.LogWarning(result.Error.Message);
+            break;
+    }
+};
+```
+
+`result.Error` is populated only for `Failed`. The SDK re-syncs the player's state **before** the dismissal fires, so state read in the handler is already up to date; an `OnStatusChanged` may arrive around the same moment.
+
+---
+
+## Offers
+
+An offer is an extra monetization webview surface for a linked player. Open it with:
+
+```csharp
+AlmediaLinkSDK.ShowOffer();
+```
+
+### Availability comes and goes
+
+The offer screen opens only for a linked player who currently has an offer, and that can change between syncs: an offer available at launch may be gone an hour later, and one that was absent may appear. Calling in any state is safe - when there is no offer, the call does nothing and the reason is logged through `OnLog`.
+
+Because availability is transient, **do not cache a "this player has an offer" flag** and gate your UI on it - it will go stale. If you surface an offer button, expect that some taps will land on a no-op.
+
+### Offer lifecycle
+
+The offer screen reports its lifecycle through the same unified events, carrying `AlmediaScreen.Offer` and the same [`InAppScreenResult`](./api-reference.md#inappscreenresult) semantics as the reward hub:
+
+```csharp
+AlmediaLinkSDK.OnScreenDismissed += (screen, result) =>
+{
+    if (screen == AlmediaScreen.Offer && result.Type == InAppScreenResultType.Failed)
+        Debug.LogWarning(result.Error.Message);
+};
+```
+
+Only one in-app screen can be open at a time - calling `ShowOffer()` while the reward hub (or the linking flow) is showing is ignored with a log, and no lifecycle event fires for the ignored call.
+
+---
+
+## Pausing your game
+
+Every SDK screen - the linking webview, the reward hub, and offers - covers the game while it is open. The unified lifecycle pair tells you exactly when to pause and resume, regardless of what opened the screen (an API method, the `LinkButton` prefab, or `Engage()` routing):
+
+```csharp
+AlmediaLinkSDK.OnScreenPresented += _ => PauseGame();
+AlmediaLinkSDK.OnScreenDismissed += (_, _) => ResumeGame();
+```
+
+The contract that makes this safe to wire one-to-one to pause/resume:
+
+- **Matched pairs.** A screen that appears fires exactly one `OnScreenPresented` and, later, exactly one `OnScreenDismissed`. Never two presents in a row, never a dismiss without a present.
+- **No-ops fire nothing.** A call that opens nothing (wrong state, missing URL, another screen already open, an `Engage()` that routes to nothing) fires neither event, so the game never pauses for a screen that never appeared.
+- **Presented fires early.** It fires when the native container commits to presenting, before the page loads - the pause lands before the player sees the screen.
+- **Dismissed fires after the sync.** Native completes its sync-on-close first, so `CurrentStatus` and related state are already up to date in the handler. For webview linking, the dismissal also fires before the outcome link callbacks (`OnLinkCompleted` etc.).
+- **System-browser linking is excluded.** When linking runs in the system browser, the app is backgrounded by the OS rather than covered - use the regular application lifecycle for that case; only the link callbacks fire.
+
+The `screen` argument ([`AlmediaScreen`](./api-reference.md#almediascreen)) identifies which screen it was, for analytics or per-screen UX.
+
+Both events fire on the Unity main thread, like every other SDK event - see [Threading](#threading).
 
 ---
 
@@ -396,23 +520,17 @@ if (n.ReceivedAt.HasValue)
 
 ## iOS - App Tracking Transparency
 
-Almedia attribution benefits from access to IDFA, which on iOS requires the player to grant tracking through Apple's ATT system dialog.
-
-### Pre-prompt and system dialog
-
-When `CanRunConsentFlow` is enabled (via `AlmediaLinkConfig.CanRunConsentFlow=true` or **Almedia → Settings → Enable Consent Flow**), the native layer requests the SDK's **ATT pre-prompt** screen mid-init. The pre-prompt is a Unity UI prefab; it explains *why* tracking matters for rewards before Apple's system dialog appears. Tapping **Continue** triggers the OS dialog. Closing the pre-prompt without continuing counts as a dismissal. The native layer throttles re-prompts internally; host code does not configure the throttle.
+Almedia attribution benefits from access to IDFA, which on iOS is gated behind Apple's App Tracking Transparency (ATT). The native SDK reads IDFA only after ATT authorization; the Unity SDK shows no consent UI of its own.
 
 ### `Info.plist`
 
-When `CanRunConsentFlow` is on, iOS requires a non-empty `NSUserTrackingUsageDescription` string in the final `Info.plist`. The SDK provides a post-build hook that:
+Any ATT usage requires a non-empty `NSUserTrackingUsageDescription` string in the final `Info.plist`. The SDK provides an iOS post-build hook that:
 
-- Runs late in the Xcode-project post-process (callback order 100).
-- Adds `NSUserTrackingUsageDescription` with a default string ("Tracking lets us credit your rewards correctly and faster.") **only if** the host app has not already set the key.
+- Runs **after all other SDKs' post-processors**, so it observes the final merged `Info.plist`.
+- Adds `NSUserTrackingUsageDescription` with a default string ("Tracking lets us credit your rewards correctly and faster.") **only if** neither the host app nor another SDK has already set the key.
 - Logs to the Unity console when it adds the key, and when it leaves an existing value untouched.
 
 To use custom copy, set `NSUserTrackingUsageDescription` directly via **Player Settings → iOS → Other Settings → Custom Info.plist entries** (or any other plugin). The SDK detects the existing value and does not overwrite it.
-
-When `CanRunConsentFlow` is off, the SDK does not modify `Info.plist`.
 
 ---
 
@@ -534,7 +652,7 @@ Download both and upload to the crash reporter alongside the host app's own mapp
 
 ## Editor and play mode
 
-`AlmediaLinkSDK.Initialize` works inside the Unity Editor by falling back to a deterministic mock bridge that simulates the native layer. The mock fires `OnStatusChanged` / `OnNotificationsReceived` on a timer, so the UI can be exercised without a device build.
+`AlmediaLinkSDK.Initialize` works inside the Unity Editor by falling back to a deterministic mock bridge that simulates the native layer. The mock fires `OnStatusChanged` / `OnNotificationsReceived` on a timer, so the UI can be exercised without a device build. It also simulates the [screen lifecycle pair](#pausing-your-game) for every screen, modeling the **webview** linking strategy - `StartLinking` (and `Engage` while eligible) fires `OnScreenPresented`/`OnScreenDismissed` around the simulated flow so pause/resume wiring is exercisable in the editor, whereas production configured with the system-browser linking strategy fires no pair for linking.
 
 Static state and event subscribers are cleared on domain reload (`RuntimeInitializeOnLoadMethod` with `SubsystemRegistration` timing). This means:
 
@@ -543,19 +661,20 @@ Static state and event subscribers are cleared on domain reload (`RuntimeInitial
 
 ### Driving non-happy paths
 
-EditorMock auto-simulate covers the happy path only: `Eligible` after `Initialize`, then `Linked` + `OnLinkCompleted` after `StartLinking`, then three mock notifications when `FetchNotifications` is called. To exercise the rest of the surface - `NotAvailable` / `Blocked` / `Disabled` statuses, every `AlmediaErrorCode`, empty or oversized notification batches, the ATT pre-prompt, native log forwarding - reach for `AlmediaLinkEditorMock`. It lets host editor code and play-mode tests drive the SDK into any state in one line, so UI branches keyed off those signals become Editor-testable without a device build.
+EditorMock auto-simulate covers the happy path only: `Eligible` after `Initialize`, then `Linked` + `OnLinkCompleted` after `StartLinking`, then three mock notifications when `FetchNotifications` is called. To exercise the rest of the surface - `NotAvailable` / `Blocked` / `Disabled` statuses, every `AlmediaErrorCode`, empty or oversized notification batches, native log forwarding - reach for `AlmediaLinkEditorMock`. It lets host editor code and play-mode tests drive the SDK into any state in one line, so UI branches keyed off those signals become Editor-testable without a device build.
 
-The public surface lives in `AlmediaLink.Editor.Testing` and consists of seven static methods:
+The public surface lives in `AlmediaLink.Editor.Testing` and consists of these static methods:
 
 - `EmitStatus(AlmediaStatus)` - delivers a status transition; `AlmediaLinkSDK.CurrentStatus` and `OnStatusChanged` reflect it immediately.
 - `EmitError(AlmediaErrorCode, string)` - delivers an error; `OnErrorOccurred` fires with the matching code and message.
 - `EmitLinkCompleted()` - fires `OnLinkCompleted` with the current UTC timestamp.
 - `EmitNotifications(params MockNotification[])` - fires `OnNotificationsReceived`. Pass no arguments for an empty batch; pass many to test scrolling / paging.
-- `EmitShowATTPrePrompt()` - triggers the ATT pre-prompt UI flow as if the native iOS layer had requested it.
+- `EmitScreenPresented(AlmediaScreen)` - fires `OnScreenPresented` for the given screen, without a real webview.
+- `EmitScreenDismissed(AlmediaScreen, InAppScreenResultType, ...)` - fires `OnScreenDismissed` for the given screen and result; the optional error code/message apply only to `Failed`.
 - `EmitNativeLog(AlmediaLogLevel, string)` - delivers a forwarded log line through the same path the iOS/Android plugins use.
 - `CancelPending()` - stops any pending auto-simulate coroutine started before manual mode flipped.
 
-**Manual mode.** The mock has two modes: auto-simulate (default; canned coroutines drive the happy path) and manual (every `Initialize` / `StartLinking` / `FetchNotifications` / `ContinueWithATT` / `SkipATT` becomes a no-op so the test owns the scenario). The first call to *any* `AlmediaLinkEditorMock` method flips manual mode for the rest of the play session and cancels any in-flight canned coroutine, so an `EmitStatus(Blocked)` issued right after `AlmediaLinkSDK.Initialize` cannot be clobbered by the delayed `Eligible`. Manual mode resets on domain reload (entering Play mode, recompiling) - there is no public toggle to leave it manually.
+**Manual mode.** The mock has two modes: auto-simulate (default; canned coroutines drive the happy path) and manual (every `Initialize` / `StartLinking` / `FetchNotifications` becomes a no-op so the test owns the scenario). The first call to *any* `AlmediaLinkEditorMock` method flips manual mode for the rest of the play session and cancels any in-flight canned coroutine, so an `EmitStatus(Blocked)` issued right after `AlmediaLinkSDK.Initialize` cannot be clobbered by the delayed `Eligible`. Manual mode resets on domain reload (entering Play mode, recompiling) - there is no public toggle to leave it manually.
 
 **Pre-init contract.** Calling any `Emit*` method before `AlmediaLinkSDK.Initialize(...)` throws `InvalidOperationException`. The throw is deliberate: it surfaces test ordering bugs at test-author time instead of swallowing them as a silent no-op.
 
@@ -610,7 +729,7 @@ The SDK copies the default asset once after import. If that did not happen, forc
 A conflicting version of an AndroidX or Kotlin library is likely present. Most often this means another plugin pulled a newer `androidx.datastore:datastore-preferences` past the SDK's 1.0.0 pin — inspect the generated Gradle output (Library/Bee/Android) and check the resolved version. If a stale `// >>> almedia-link deps` block from an older SDK version is still in `Assets/Plugins/Android/mainTemplate.gradle`, delete it (the SDK no longer manages that block — deps come from `AlmediaLink.androidlib`). If EDM4U is in use, force a re-resolve via **Assets → External Dependency Manager → Android Resolver → Resolve**.
 
 **iOS build is missing `NSUserTrackingUsageDescription`.**
-The post-build hook only runs when `CanRunConsentFlow` is enabled. When ATT is required for other reasons but the Almedia consent flow is disabled, add the key directly in **Player Settings → iOS → Other Settings → Custom Info.plist entries**.
+The SDK's post-build hook adds a default value on every iOS build (unless the host or another SDK already set it). If it's still missing, confirm another post-processor isn't stripping it; you can always set the key explicitly via **Player Settings → iOS → Other Settings → Custom Info.plist entries**.
 
 **Status never leaves `NotInitialized`.**
 Confirm `OnErrorOccurred` is not firing first with `InvalidConfiguration`. If both are silent, subscribe to `OnLog` and look for `Initializing SDK` / `Status changed: …` lines. When the log shows `Status changed: NotInitialized` but nothing else, the native HTTP request has not returned. The most common causes are an offline device or an integration key from a different environment.

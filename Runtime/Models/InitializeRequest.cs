@@ -31,7 +31,7 @@ namespace AlmediaLink.Models
                 adid = config.AdjustDeviceId ?? "",
                 afid = config.AppsFlyerId ?? "",
                 notificationsPollingIntervalSec = config.NotificationsPollingIntervalSec,
-                canRunConsentFlow = config.CanRunConsentFlow
+                canRunConsentFlow = false
             };
         }
     }

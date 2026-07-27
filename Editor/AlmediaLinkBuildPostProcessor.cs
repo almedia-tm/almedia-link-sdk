@@ -8,13 +8,15 @@ using UnityEngine;
 namespace AlmediaLink.Editor
 {
     /// <summary>
-    /// Post-build hook for iOS. When <see cref="AlmediaLinkSettings.CanRunConsentFlow"/> is
-    /// enabled, ensures <c>NSUserTrackingUsageDescription</c> is present in the generated
-    /// Xcode Info.plist so the SDK's ATT flow can complete.
+    /// Post-build hook for iOS. The SDK reads IDFA gated behind App Tracking Transparency,
+    /// which iOS only permits when <c>NSUserTrackingUsageDescription</c> is present in the
+    /// app's Info.plist. This hook ensures that key exists in the generated Xcode project.
     /// <para>
-    /// If the host app has already supplied its own <c>NSUserTrackingUsageDescription</c>
-    /// (for example, via Player Settings → iOS → Custom Info.plist entries or another
-    /// plugin's post-processor), this hook leaves the existing entry untouched.
+    /// If the host app (or another SDK) has already supplied its own
+    /// <c>NSUserTrackingUsageDescription</c> via Player Settings → iOS → Custom Info.plist
+    /// entries, or another plugin's post-processor, this hook leaves the existing entry
+    /// untouched. It runs after all other post-processors (see <see cref="CallbackOrder"/>)
+    /// so it observes the final merged Info.plist.
     /// </para>
     /// </summary>
     public static class AlmediaLinkBuildPostProcessor
@@ -24,29 +26,15 @@ namespace AlmediaLink.Editor
         private const string DefaultUsageDescription =
             "Tracking lets us credit your rewards correctly and faster.";
 
-        // Run late so we observe the final merged Info.plist after Unity and other
-        // plugins have contributed their entries.
-        private const int CallbackOrder = 100;
+        // Run last so we observe the final merged Info.plist after Unity and every other
+        // SDK's post-processor have contributed their entries: we only add a default when
+        // nobody else set the key, and we never overwrite an existing one.
+        private const int CallbackOrder = int.MaxValue;
 
         [PostProcessBuild(CallbackOrder)]
         public static void OnPostProcessBuild(BuildTarget target, string pathToBuiltProject)
         {
             if (target != BuildTarget.iOS) return;
-
-            var settings = AlmediaLinkSettings.Load();
-            if (settings == null)
-            {
-                Debug.LogWarning(
-                    "[AlmediaLink] Settings asset not found; skipping iOS post-process. " +
-                    "Open Almedia → Settings to create it.");
-                return;
-            }
-
-            if (!settings.CanRunConsentFlow)
-            {
-                // The SDK is not running the consent flow; do not touch the host app's Info.plist.
-                return;
-            }
 
             string plistPath = Path.Combine(pathToBuiltProject, "Info.plist");
             if (!File.Exists(plistPath))
@@ -62,7 +50,7 @@ namespace AlmediaLink.Editor
             {
                 Debug.Log(
                     $"[AlmediaLink] {UsageDescriptionKey} already present in Info.plist; " +
-                    "leaving host-app entry untouched.");
+                    "leaving the existing entry untouched.");
                 return;
             }
 
@@ -70,9 +58,9 @@ namespace AlmediaLink.Editor
             plist.WriteToFile(plistPath);
 
             Debug.Log(
-                $"[AlmediaLink] Added {UsageDescriptionKey} to Info.plist " +
-                "(CanRunConsentFlow=true). To customize the copy, add your own " +
-                "NSUserTrackingUsageDescription entry via Player Settings.");
+                $"[AlmediaLink] Added a default {UsageDescriptionKey} to Info.plist " +
+                "(required for ATT-gated IDFA reading). To customize the copy, add your own " +
+                "NSUserTrackingUsageDescription entry via Player Settings → iOS.");
         }
     }
 }

@@ -18,7 +18,6 @@ namespace AlmediaLink.Editor
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_androidIntegrationKey"), "Android Integration Key");
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_notificationPollIntervalSeconds"), "Polling Interval (sec)");
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_enableDefaultNotificationUI"), "Enable Default Notification UI");
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_canRunConsentFlow"), "Enable Consent Flow (iOS ATT)");
 
             GUILayout.Space(8);
             EditorGUILayout.LabelField("Link Popup Text", EditorStyles.boldLabel);
@@ -44,20 +43,6 @@ namespace AlmediaLink.Editor
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_notificationBackgroundColor"), "Background Color");
 
             GUILayout.Space(8);
-            EditorGUILayout.LabelField("ATT Pre-Prompt Text (iOS)", EditorStyles.boldLabel);
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_attPromptTitle"), "Title");
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_attRewardAmount"), "Reward Amount");
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_attWhyTitle"), "Why Title");
-            AlmediaLinkSettingsEditor.DrawTextArea(serializedObject.FindProperty("_attWhyBody"), "Why Body");
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_attControlTitle"), "Control Title");
-            AlmediaLinkSettingsEditor.DrawTextArea(serializedObject.FindProperty("_attControlBody"), "Control Body");
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_attContinueButtonText"), "Continue Button Text");
-            GUILayout.Space(4);
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_attBackgroundColor"), "Background Color");
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_attPrimaryButtonColor"), "Primary Button Color");
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_attButtonTextColor"), "Button Text Color");
-
-            GUILayout.Space(8);
             EditorGUILayout.LabelField("Prefab Overrides (optional)", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
                 "Assign Prefab Variants of the SDK base prefabs to customize the UI. " +
@@ -66,7 +51,6 @@ namespace AlmediaLink.Editor
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_linkPopupOverride"), "Link Popup");
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_notificationCardOverride"), "Notification Card");
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_activityOverlayOverride"), "Activity Overlay");
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_attPrePromptOverride"), "ATT Pre-Prompt");
 
             EditorGUIUtility.labelWidth = prevLabelWidth;
 

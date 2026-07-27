@@ -43,6 +43,39 @@ namespace AlmediaLink.Bridge
             _plugin.Call("startLinking", activity, placement.ToNativeString());
         }
 
+        public void ShowRewardHub()
+        {
+            using var activity = GetActivity();
+            if (activity == null)
+            {
+                AlmediaLog.Error("Cannot show reward hub: Android Activity not available.");
+                return;
+            }
+            _plugin.Call("showRewardHub", activity);
+        }
+
+        public void ShowOffer()
+        {
+            using var activity = GetActivity();
+            if (activity == null)
+            {
+                AlmediaLog.Error("Cannot show offer: Android Activity not available.");
+                return;
+            }
+            _plugin.Call("showOffer", activity);
+        }
+
+        public void Engage()
+        {
+            using var activity = GetActivity();
+            if (activity == null)
+            {
+                AlmediaLog.Error("Cannot engage: Android Activity not available.");
+                return;
+            }
+            _plugin.Call("engage", activity);
+        }
+
         public void FetchNotifications() => _plugin.Call("fetchNotifications");
         public void StartNotificationPolling() => _plugin.Call("startNotificationPolling");
         public void StopNotificationPolling() => _plugin.Call("stopNotificationPolling");
@@ -51,7 +84,7 @@ namespace AlmediaLink.Bridge
         public void SkipATT() { } // iOS only
 
         public void TrackPromoLoad(PromoState state) => _plugin.Call("trackPromoLoad", state.ToNativeString());
-        public void TrackPromoClick() => _plugin.Call("trackPromoClick");
+        public void TrackPromoClick(PromoState state) => _plugin.Call("trackPromoClick", state.ToNativeString());
         public void TrackPopupShow() => _plugin.Call("trackPopupShow");
         public void TrackPopupDismiss() => _plugin.Call("trackPopupDismiss");
         public void TrackPopupCtaClick() => _plugin.Call("trackPopupCtaClick");

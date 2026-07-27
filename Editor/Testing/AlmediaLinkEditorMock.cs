@@ -6,7 +6,7 @@ namespace AlmediaLink.Editor.Testing
 {
     /// <summary>
     /// Editor-only test hook for driving AlmediaLinkSDK into any state (status, error,
-    /// notifications, ATT pre-prompt, native log) without going through a real device or
+    /// notifications, native log) without going through a real device or
     /// backend. Lives in the AlmediaLink.Editor assembly (includePlatforms:["Editor"]) so
     /// the class does not exist in iOS/Android player builds at the assembly level
     /// host code that references it will fail to compile on a player target.
@@ -54,9 +54,30 @@ namespace AlmediaLink.Editor.Testing
         }
 
         /// <summary>
-        /// Triggers the iOS ATT pre-prompt UI flow as if the native layer had requested it.
-        /// Use this to exercise <c>ATTPrePromptController</c> branches without iOS build configuration.
+        /// Fires <see cref="AlmediaLinkSDK.OnScreenPresented"/> for the given screen, as if the
+        /// native container had committed to presenting it. Pair it with a later
+        /// <see cref="EmitScreenDismissed"/> to reproduce native's matched-pair contract.
         /// </summary>
+        public static void EmitScreenPresented(AlmediaScreen screen)
+            => Mock().EmitScreenPresented(screen);
+
+        /// <summary>
+        /// Fires <see cref="AlmediaLinkSDK.OnScreenDismissed"/> for the given screen with the given
+        /// result. Supply an error code and message only for
+        /// <see cref="InAppScreenResultType.Failed"/>; they are ignored for completed/cancelled
+        /// outcomes.
+        /// </summary>
+        public static void EmitScreenDismissed(AlmediaScreen screen, InAppScreenResultType result,
+            AlmediaErrorCode errorCode = AlmediaErrorCode.Unknown, string errorMessage = null)
+            => Mock().EmitScreenDismissed(screen, result, errorCode, errorMessage);
+
+        /// <summary>
+        /// Legacy hook for a pre-prompt screen the SDK no longer shows. Raises the bridge's
+        /// ShowATTPrePrompt event, which has no subscribers, so no UI appears; like every Emit*
+        /// it still flips the mock into manual mode. Kept so existing QA scripts compile;
+        /// scheduled for removal in a future release.
+        /// </summary>
+        [Obsolete("The SDK no longer shows an ATT pre-prompt; this raises an event with no subscribers and has no effect. Scheduled for removal in a future release.")]
         public static void EmitShowATTPrePrompt()
             => Mock().EmitShowATTPrePrompt();
 

@@ -13,6 +13,15 @@ namespace AlmediaLink.Bridge
         private static extern void AlmediaLink_StartLinking(string placementType);
 
         [DllImport("__Internal")]
+        private static extern void AlmediaLink_ShowRewardHub();
+
+        [DllImport("__Internal")]
+        private static extern void AlmediaLink_ShowOffer();
+
+        [DllImport("__Internal")]
+        private static extern void AlmediaLink_Engage();
+
+        [DllImport("__Internal")]
         private static extern void AlmediaLink_FetchNotifications();
 
         [DllImport("__Internal")]
@@ -31,7 +40,7 @@ namespace AlmediaLink.Bridge
         private static extern void AlmediaLink_TrackPromoLoad(string state);
 
         [DllImport("__Internal")]
-        private static extern void AlmediaLink_TrackPromoClick();
+        private static extern void AlmediaLink_TrackPromoClick(string state);
 
         [DllImport("__Internal")]
         private static extern void AlmediaLink_TrackPopupShow();
@@ -53,13 +62,16 @@ namespace AlmediaLink.Bridge
 
         public void Initialize(string json) => AlmediaLink_Initialize(json);
         public void StartLinking(PlacementType placement) => AlmediaLink_StartLinking(placement.ToNativeString());
+        public void ShowRewardHub() => AlmediaLink_ShowRewardHub();
+        public void ShowOffer() => AlmediaLink_ShowOffer();
+        public void Engage() => AlmediaLink_Engage();
         public void FetchNotifications() => AlmediaLink_FetchNotifications();
         public void StartNotificationPolling() => AlmediaLink_StartNotificationPolling();
         public void StopNotificationPolling() => AlmediaLink_StopNotificationPolling();
         public void ContinueWithATT() => AlmediaLink_ContinueWithATT();
         public void SkipATT() => AlmediaLink_SkipATT();
         public void TrackPromoLoad(PromoState state) => AlmediaLink_TrackPromoLoad(state.ToNativeString());
-        public void TrackPromoClick() => AlmediaLink_TrackPromoClick();
+        public void TrackPromoClick(PromoState state) => AlmediaLink_TrackPromoClick(state.ToNativeString());
         public void TrackPopupShow() => AlmediaLink_TrackPopupShow();
         public void TrackPopupDismiss() => AlmediaLink_TrackPopupDismiss();
         public void TrackPopupCtaClick() => AlmediaLink_TrackPopupCtaClick();

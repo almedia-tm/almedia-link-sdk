@@ -67,12 +67,6 @@ namespace AlmediaLink
         public int? NotificationsPollingIntervalSec { get; set; }
 
         /// <summary>
-        /// Whether the SDK should run the consent flow (e.g. iOS ATT pre-prompt + system dialog).
-        /// If null, falls back to AlmediaLinkSettings.CanRunConsentFlow (default false).
-        /// </summary>
-        public bool? CanRunConsentFlow { get; set; }
-
-        /// <summary>
         /// Resolves this config against the ScriptableObject defaults loaded from Resources.
         /// </summary>
         internal ResolvedAlmediaLinkConfig Resolve()
@@ -110,9 +104,7 @@ namespace AlmediaLink
             result.NotificationsPollingIntervalSec = NotificationsPollingIntervalSec
                 ?? settings?.NotificationPollIntervalSeconds
                 ?? AlmediaLinkSettings.DefaultPollInterval;
-
-            result.CanRunConsentFlow = CanRunConsentFlow ?? settings?.CanRunConsentFlow ?? false;
-
+            
             result.Gaid = Gaid;
             result.Asid = Asid;
             result.Oaid = Oaid;

@@ -13,10 +13,19 @@ namespace AlmediaLink.Bridge
         private const float LinkFlowDelay = 0.5f;
         private const float PollDelay = 0.2f;
         private const float ATTDelay = 0.3f;
+        private const float ScreenCloseDelay = 0.3f;
 
         private readonly MonoBehaviour _host;
         private readonly List<Coroutine> _scheduled = new List<Coroutine>();
         private bool _manualMode;
+
+        // Models the native "only one in-app screen at a time" guard so the arbitration is
+        // exercisable in the editor. Auto-sim only; manual-mode tests drive closes directly.
+        private bool _screenOpen;
+
+        // Tracks the last status the mock emitted so Engage() can stand in for native's
+        // state-based routing decision (native, not Unity, owns that switch).
+        private AlmediaStatus _lastStatus = AlmediaStatus.NotInitialized;
 
         public EditorMockBridge(MonoBehaviour host)
         {
@@ -41,14 +50,7 @@ namespace AlmediaLink.Bridge
             AlmediaLog.Debug("Editor mock: Initialize");
             if (_manualMode) { AlmediaLog.Debug("Editor mock: manual mode — Initialize is a no-op"); return; }
 
-            var request = JsonUtility.FromJson<InitializeRequest>(json);
-            if (request.canRunConsentFlow)
-            {
-                AlmediaLog.Debug("Editor mock: canRunConsentFlow=true, showing ATT pre-prompt");
-                Schedule(SimulateShowATTPrePrompt());
-                return;
-            }
-
+            // The SDK no longer shows the pre-prompt, so it is never auto-shown in the editor.
             Schedule(SimulateInitialize());
         }
 
@@ -56,7 +58,57 @@ namespace AlmediaLink.Bridge
         {
             AlmediaLog.Debug($"Editor mock: StartLinking (placement={placement.ToNativeString()})");
             if (_manualMode) { AlmediaLog.Debug("Editor mock: manual mode — StartLinking is a no-op"); return; }
+            if (_screenOpen) { AlmediaLog.Debug("Editor mock: an in-app screen is already open — StartLinking is a no-op"); return; }
+            _screenOpen = true;
+            _host.gameObject.SendMessage("OnScreenPresented", BuildScreenPresentedJson(AlmediaScreen.Linking));
             Schedule(SimulateLinkFlow());
+        }
+
+        public void ShowRewardHub()
+        {
+            AlmediaLog.Debug("Editor mock: ShowRewardHub");
+            if (_manualMode) { AlmediaLog.Debug("Editor mock: manual mode — ShowRewardHub is a no-op"); return; }
+            if (_screenOpen) { AlmediaLog.Debug("Editor mock: an in-app screen is already open — ShowRewardHub is a no-op"); return; }
+            SimulateScreenLifecycle(AlmediaScreen.RewardHub);
+        }
+
+        public void ShowOffer()
+        {
+            AlmediaLog.Debug("Editor mock: ShowOffer");
+            if (_manualMode) { AlmediaLog.Debug("Editor mock: manual mode — ShowOffer is a no-op"); return; }
+            if (_screenOpen) { AlmediaLog.Debug("Editor mock: an in-app screen is already open — ShowOffer is a no-op"); return; }
+            SimulateScreenLifecycle(AlmediaScreen.Offer);
+        }
+
+        // Simulates native's matched-pair contract: OnScreenPresented synchronously (native
+        // commits to presenting before the page loads) and exactly one OnScreenDismissed after
+        // ScreenCloseDelay. Callers emit neither for guarded/no-op calls - they must return
+        // before reaching this.
+        private void SimulateScreenLifecycle(AlmediaScreen screen)
+        {
+            _screenOpen = true;
+            _host.gameObject.SendMessage("OnScreenPresented", BuildScreenPresentedJson(screen));
+            Schedule(SimulateScreenDismiss(screen));
+        }
+
+        public void Engage()
+        {
+            AlmediaLog.Debug("Editor mock: Engage");
+            if (_manualMode) { AlmediaLog.Debug("Editor mock: manual mode — Engage is a no-op"); return; }
+
+            // Stands in for native's routing decision, keyed off the last emitted status.
+            switch (_lastStatus)
+            {
+                case AlmediaStatus.Eligible:
+                    StartLinking(PlacementType.Popup);
+                    break;
+                case AlmediaStatus.Linked:
+                    ShowRewardHub();
+                    break;
+                default:
+                    AlmediaLog.Debug($"Editor mock: Engage is a no-op in status {_lastStatus}");
+                    break;
+            }
         }
 
         public void FetchNotifications()
@@ -91,7 +143,7 @@ namespace AlmediaLink.Bridge
         }
 
         public void TrackPromoLoad(PromoState state) => AlmediaLog.Debug($"Editor mock: TrackPromoLoad state={state.ToNativeString()}");
-        public void TrackPromoClick() => AlmediaLog.Debug("Editor mock: TrackPromoClick");
+        public void TrackPromoClick(PromoState state) => AlmediaLog.Debug($"Editor mock: TrackPromoClick state={state.ToNativeString()}");
         public void TrackPopupShow() => AlmediaLog.Debug("Editor mock: TrackPopupShow");
         public void TrackPopupDismiss() => AlmediaLog.Debug("Editor mock: TrackPopupDismiss");
         public void TrackPopupCtaClick() => AlmediaLog.Debug("Editor mock: TrackPopupCtaClick");
@@ -106,6 +158,7 @@ namespace AlmediaLink.Bridge
 
         internal void EmitStatus(AlmediaStatus status)
         {
+            _lastStatus = status;
             var json = JsonUtility.ToJson(new StatusChangedResponse { status = StatusToNative(status) });
             _host.gameObject.SendMessage("OnStatusChanged", json);
         }
@@ -136,6 +189,18 @@ namespace AlmediaLink.Bridge
                 notifications = items ?? Array.Empty<NotificationItem>()
             });
             _host.gameObject.SendMessage("OnNotifications", json);
+        }
+
+        internal void EmitScreenPresented(AlmediaScreen screen)
+        {
+            _host.gameObject.SendMessage("OnScreenPresented", BuildScreenPresentedJson(screen));
+        }
+
+        internal void EmitScreenDismissed(AlmediaScreen screen, InAppScreenResultType result,
+            AlmediaErrorCode errorCode = AlmediaErrorCode.Unknown, string errorMessage = null)
+        {
+            _host.gameObject.SendMessage("OnScreenDismissed",
+                BuildScreenDismissedJson(screen, result, errorCode, errorMessage));
         }
 
         internal void EmitShowATTPrePrompt()
@@ -209,10 +274,27 @@ namespace AlmediaLink.Bridge
             SendStatusChanged("eligible");
         }
 
+        private IEnumerator SimulateScreenDismiss(AlmediaScreen screen)
+        {
+            yield return new WaitForSeconds(ScreenCloseDelay);
+            _screenOpen = false;
+            _host.gameObject.SendMessage("OnScreenDismissed",
+                BuildScreenDismissedJson(screen, InAppScreenResultType.Completed, AlmediaErrorCode.Unknown, null));
+        }
+
+        // Models the WEBVIEW linking strategy so pause/resume wiring is exercisable in the
+        // editor (production configured with the system-browser strategy fires no pair for
+        // linking). StartLinking already sent OnScreenPresented on the commit-to-present;
+        // the rest follows the documented contract: the pre-dismissal status refresh, then
+        // OnScreenDismissed, then the outcome link callback.
         private IEnumerator SimulateLinkFlow()
         {
             yield return new WaitForSeconds(LinkFlowDelay);
             SendStatusChanged("linked");
+
+            _screenOpen = false;
+            _host.gameObject.SendMessage("OnScreenDismissed",
+                BuildScreenDismissedJson(AlmediaScreen.Linking, InAppScreenResultType.Completed, AlmediaErrorCode.Unknown, null));
 
             yield return new WaitForSeconds(StatusTransitionDelay);
             var json = JsonUtility.ToJson(new LinkCompletedResponse
@@ -260,9 +342,45 @@ namespace AlmediaLink.Bridge
 
         private void SendStatusChanged(string status)
         {
+            if (StatusExtensions.TryFromString(status, out var parsed)) _lastStatus = parsed;
             var json = JsonUtility.ToJson(new StatusChangedResponse { status = status });
             _host.gameObject.SendMessage("OnStatusChanged", json);
         }
+
+        internal static string BuildScreenPresentedJson(AlmediaScreen screen)
+        {
+            return $"{{\"screen\":\"{screen.ToNativeString()}\"}}";
+        }
+
+        // Reproduces the exact native wire shape for a screen-dismissed callback, including the
+        // literal `"error":null` for non-failed outcomes. JsonUtility cannot emit a null nested
+        // object, so hand-building the string is what actually exercises the real parse path (and
+        // the null trap).
+        internal static string BuildScreenDismissedJson(AlmediaScreen screen, InAppScreenResultType result,
+            AlmediaErrorCode errorCode, string errorMessage)
+        {
+            var screenStr = screen.ToNativeString();
+            var resultStr = ResultToNative(result);
+            if (result != InAppScreenResultType.Failed)
+                return $"{{\"screen\":\"{screenStr}\",\"result\":\"{resultStr}\",\"error\":null}}";
+
+            var code = ErrorCodeToNative(errorCode);
+            var message = EscapeJson(errorMessage ?? "");
+            return $"{{\"screen\":\"{screenStr}\",\"result\":\"{resultStr}\",\"error\":{{\"code\":\"{code}\",\"message\":\"{message}\"}}}}";
+        }
+
+        private static string ResultToNative(InAppScreenResultType result)
+        {
+            switch (result)
+            {
+                case InAppScreenResultType.Completed: return "completed";
+                case InAppScreenResultType.Cancelled: return "cancelled";
+                case InAppScreenResultType.Failed: return "failed";
+                default: throw new ArgumentOutOfRangeException(nameof(result), result, "Unknown InAppScreenResultType value; add a mapping in EditorMockBridge.");
+            }
+        }
+
+        private static string EscapeJson(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
         // Reverse maps for the native string contracts. Must stay in sync with the
         // forward maps in StatusExtensions.TryFromString, AlmediaError.MapErrorCode,

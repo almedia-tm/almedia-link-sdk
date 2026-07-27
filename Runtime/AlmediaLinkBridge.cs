@@ -13,6 +13,8 @@ namespace AlmediaLink
         internal static event Action<LinkCompletedResponse> LinkCompleted;
         internal static event Action<NotificationsReceivedResponse> NotificationsReceived;
         internal static event Action<ErrorCallbackResponse> ErrorOccurred;
+        internal static event Action<AlmediaScreen> ScreenPresented;
+        internal static event Action<AlmediaScreen, ScreenDismissedResponse> ScreenDismissed;
         internal static event Action ShowATTPrePromptRequested;
         internal static event Action<NativeLogResponse> NativeLogReceived;
 
@@ -26,6 +28,8 @@ namespace AlmediaLink
             "OnLinkCompleted",
             "OnNotifications",
             "OnError",
+            "OnScreenPresented",
+            "OnScreenDismissed",
             "ShowATTPrePrompt",
             "OnNativeLog",
         };
@@ -52,6 +56,20 @@ namespace AlmediaLink
         {
             if (!TryParse<ErrorCallbackResponse>(json, nameof(OnError), out var response)) return;
             SafeInvoke(nameof(OnError), () => ErrorOccurred?.Invoke(response));
+        }
+
+        public void OnScreenPresented(string json)
+        {
+            if (!TryParse<ScreenPresentedResponse>(json, nameof(OnScreenPresented), out var response)) return;
+            if (!TryParseScreen(response.screen, nameof(OnScreenPresented), out var screen)) return;
+            SafeInvoke(nameof(OnScreenPresented), () => ScreenPresented?.Invoke(screen));
+        }
+
+        public void OnScreenDismissed(string json)
+        {
+            if (!TryParse<ScreenDismissedResponse>(json, nameof(OnScreenDismissed), out var response)) return;
+            if (!TryParseScreen(response.screen, nameof(OnScreenDismissed), out var screen)) return;
+            SafeInvoke(nameof(OnScreenDismissed), () => ScreenDismissed?.Invoke(screen, response));
         }
 
         public void ShowATTPrePrompt(string json)
@@ -89,6 +107,15 @@ namespace AlmediaLink
             return true;
         }
 
+        // An unknown or missing screen string is dropped with a warning - a lifecycle event
+        // must never reach subscribers with a garbage AlmediaScreen value.
+        private static bool TryParseScreen(string value, string methodName, out AlmediaScreen screen)
+        {
+            if (AlmediaScreenExtensions.TryFromString(value, out screen)) return true;
+            AlmediaLog.Warning($"Unrecognized screen '{value}' in {methodName}; dropping the callback.");
+            return false;
+        }
+
         private static void SafeInvoke(string methodName, Action action)
         {
             try
@@ -108,6 +135,8 @@ namespace AlmediaLink
             LinkCompleted = null;
             NotificationsReceived = null;
             ErrorOccurred = null;
+            ScreenPresented = null;
+            ScreenDismissed = null;
             ShowATTPrePromptRequested = null;
             NativeLogReceived = null;
         }

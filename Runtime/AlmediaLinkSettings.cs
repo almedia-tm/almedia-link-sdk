@@ -23,9 +23,6 @@ namespace AlmediaLink
         [Tooltip("When enabled, the SDK renders the built-in NotificationCard and ActivityOverlay. Disable to use your own UI.")]
         [SerializeField] private bool _enableDefaultNotificationUI = true;
 
-        [Tooltip("Whether the SDK should run the consent flow (e.g. iOS ATT pre-prompt + system dialog).")]
-        [SerializeField] private bool _canRunConsentFlow;
-
         [Header("UI Text")]
         [Tooltip("LinkPopup headline.")]
         [SerializeField] private string _popupTitle = "Get Rewarded While Playing";
@@ -63,24 +60,27 @@ namespace AlmediaLink
         [Tooltip("Notification card background color.")]
         [SerializeField] private Color _notificationBackgroundColor = new Color32(0x12, 0x12, 0x12, 0xFF);
 
-        [Header("ATT Pre-Prompt Text (iOS Only)")]
+        // Settings for an iOS pre-prompt screen the SDK no longer shows. Kept for
+        // serialized-data compatibility; scheduled for removal in a future release.
+        [HideInInspector]
         [SerializeField] private string _attPromptTitle = "Don't miss your rewards by enabling app tracking";
+        [HideInInspector]
         [SerializeField] private string _attRewardAmount = "$9.38";
+        [HideInInspector]
         [SerializeField] private string _attWhyTitle = "Why do we need this?";
-        [TextArea(2, 4)]
+        [HideInInspector]
         [SerializeField] private string _attWhyBody = "Tracking lets us make sure your rewards can be credited correctly and faster.";
+        [HideInInspector]
         [SerializeField] private string _attControlTitle = "You're in control";
-        [TextArea(2, 4)]
+        [HideInInspector]
         [SerializeField] private string _attControlBody = "Change permissions at any time in Settings.";
+        [HideInInspector]
         [SerializeField] private string _attContinueButtonText = "Continue";
-
-        [Tooltip("ATT Pre-Prompt background color.")]
+        [HideInInspector]
         [SerializeField] private Color _attBackgroundColor = new Color32(0x12, 0x12, 0x12, 0xFF);
-
-        [Tooltip("ATT Pre-Prompt primary (Continue) button background color.")]
+        [HideInInspector]
         [SerializeField] private Color _attPrimaryButtonColor = new Color32(0x00, 0xC8, 0x53, 0xFF);
-
-        [Tooltip("ATT Pre-Prompt primary button text color.")]
+        [HideInInspector]
         [SerializeField] private Color _attButtonTextColor = Color.white;
 
         [Header("Prefab Overrides (optional - assign Prefab Variants to customize UI)")]
@@ -93,14 +93,14 @@ namespace AlmediaLink
         [Tooltip("Optional Prefab Variant of ActivityOverlay to use instead of the SDK default. Leave empty to use the built-in prefab.")]
         [SerializeField] private ActivityOverlayController _activityOverlayOverride;
 
-        [Tooltip("Optional Prefab Variant of ATTPrePrompt to use instead of the SDK default. Leave empty to use the built-in prefab.")]
+        // Override for a pre-prompt screen the SDK no longer shows; scheduled for removal.
+        [HideInInspector]
         [SerializeField] private ATTPrePromptController _attPrePromptOverride;
 
         public string IosIntegrationKey => _iosIntegrationKey;
         public string AndroidIntegrationKey => _androidIntegrationKey;
         public int NotificationPollIntervalSeconds => _notificationPollIntervalSeconds;
         public bool EnableDefaultNotificationUI => _enableDefaultNotificationUI;
-        public bool CanRunConsentFlow => _canRunConsentFlow;
 
         public string PopupTitle => _popupTitle;
         public string Benefit1Title => _benefit1Title;

@@ -23,7 +23,6 @@ namespace AlmediaLink.Editor
         private SerializedProperty _androidIntegrationKey;
         private SerializedProperty _notificationPollIntervalSeconds;
         private SerializedProperty _enableDefaultNotificationUI;
-        private SerializedProperty _canRunConsentFlow;
 
         // UI Text
         private SerializedProperty _popupTitle;
@@ -40,23 +39,10 @@ namespace AlmediaLink.Editor
         // Notifications
         private SerializedProperty _notificationBackgroundColor;
 
-        // ATT Pre-Prompt Text
-        private SerializedProperty _attPromptTitle;
-        private SerializedProperty _attRewardAmount;
-        private SerializedProperty _attWhyTitle;
-        private SerializedProperty _attWhyBody;
-        private SerializedProperty _attControlTitle;
-        private SerializedProperty _attControlBody;
-        private SerializedProperty _attContinueButtonText;
-        private SerializedProperty _attBackgroundColor;
-        private SerializedProperty _attPrimaryButtonColor;
-        private SerializedProperty _attButtonTextColor;
-
         // Prefab Overrides
         private SerializedProperty _linkPopupOverride;
         private SerializedProperty _notificationCardOverride;
         private SerializedProperty _activityOverlayOverride;
-        private SerializedProperty _attPrePromptOverride;
 
         [MenuItem("Almedia/Settings")]
         public static void ShowWindow()
@@ -121,7 +107,6 @@ namespace AlmediaLink.Editor
             _androidIntegrationKey = _serializedObject.FindProperty("_androidIntegrationKey");
             _notificationPollIntervalSeconds = _serializedObject.FindProperty("_notificationPollIntervalSeconds");
             _enableDefaultNotificationUI = _serializedObject.FindProperty("_enableDefaultNotificationUI");
-            _canRunConsentFlow = _serializedObject.FindProperty("_canRunConsentFlow");
 
             _popupTitle = _serializedObject.FindProperty("_popupTitle");
             _benefit1Title = _serializedObject.FindProperty("_benefit1Title");
@@ -136,21 +121,9 @@ namespace AlmediaLink.Editor
 
             _notificationBackgroundColor = _serializedObject.FindProperty("_notificationBackgroundColor");
 
-            _attPromptTitle = _serializedObject.FindProperty("_attPromptTitle");
-            _attRewardAmount = _serializedObject.FindProperty("_attRewardAmount");
-            _attWhyTitle = _serializedObject.FindProperty("_attWhyTitle");
-            _attWhyBody = _serializedObject.FindProperty("_attWhyBody");
-            _attControlTitle = _serializedObject.FindProperty("_attControlTitle");
-            _attControlBody = _serializedObject.FindProperty("_attControlBody");
-            _attContinueButtonText = _serializedObject.FindProperty("_attContinueButtonText");
-            _attBackgroundColor = _serializedObject.FindProperty("_attBackgroundColor");
-            _attPrimaryButtonColor = _serializedObject.FindProperty("_attPrimaryButtonColor");
-            _attButtonTextColor = _serializedObject.FindProperty("_attButtonTextColor");
-
             _linkPopupOverride = _serializedObject.FindProperty("_linkPopupOverride");
             _notificationCardOverride = _serializedObject.FindProperty("_notificationCardOverride");
             _activityOverlayOverride = _serializedObject.FindProperty("_activityOverlayOverride");
-            _attPrePromptOverride = _serializedObject.FindProperty("_attPrePromptOverride");
         }
 
         private void OnGUI()
@@ -182,8 +155,6 @@ namespace AlmediaLink.Editor
             GUILayout.Space(4);
             DrawCollapsibleSection("show_notifications", "Notifications", DrawNotifications, false);
             GUILayout.Space(4);
-            DrawCollapsibleSection("show_att_text", "ATT Pre-Prompt Text (iOS)", DrawATTPrePrompt, false);
-            GUILayout.Space(4);
             DrawCollapsibleSection("show_prefab_overrides", "Prefab Overrides", DrawPrefabOverrides, false);
             GUILayout.Space(8);
             DrawEnvironment();
@@ -208,7 +179,6 @@ namespace AlmediaLink.Editor
             DrawFieldWithWarning(_androidIntegrationKey, "Android Integration Key", "Android Integration Key is required.");
             DrawField(_notificationPollIntervalSeconds, "Polling Interval (sec)");
             DrawField(_enableDefaultNotificationUI, "Enable Default Notification UI");
-            DrawField(_canRunConsentFlow, "Enable Consent Flow (iOS ATT)");
 
             EditorGUIUtility.labelWidth = prevLabelWidth;
         }
@@ -239,21 +209,6 @@ namespace AlmediaLink.Editor
             DrawField(_notificationBackgroundColor, "Background Color");
         }
 
-        private void DrawATTPrePrompt()
-        {
-            DrawField(_attPromptTitle, "Title");
-            DrawField(_attRewardAmount, "Reward Amount");
-            DrawField(_attWhyTitle, "Why Title");
-            DrawTextArea(_attWhyBody, "Why Body");
-            DrawField(_attControlTitle, "Control Title");
-            DrawTextArea(_attControlBody, "Control Body");
-            DrawField(_attContinueButtonText, "Continue Button Text");
-            GUILayout.Space(6);
-            DrawField(_attBackgroundColor, "Background Color");
-            DrawField(_attPrimaryButtonColor, "Primary Button Color");
-            DrawField(_attButtonTextColor, "Button Text Color");
-        }
-
         private void DrawPrefabOverrides()
         {
             EditorGUILayout.HelpBox(
@@ -264,7 +219,6 @@ namespace AlmediaLink.Editor
             DrawField(_linkPopupOverride, "Link Popup");
             DrawField(_notificationCardOverride, "Notification Card");
             DrawField(_activityOverlayOverride, "Activity Overlay");
-            DrawField(_attPrePromptOverride, "ATT Pre-Prompt");
         }
 
         private void DrawEnvironment()

@@ -11,7 +11,7 @@ Mechanically, the SDK lets players connect a Freecash account from inside a host
 The SDK has three layers:
 
 - **C# facade** (`AlmediaLinkSDK` static API) - the only surface host code touches.
-- **UI prefabs** - link button, popup, notification card, activity overlay, and ATT pre-prompt, all themable from **Almedia > Settings** or replaceable as Prefab Variants.
+- **UI prefabs** - link button, popup, notification card, and activity overlay, all themable from **Almedia > Settings** or replaceable as Prefab Variants.
 - **Native plugins** - one bridge per platform. iOS ships a single `.xcframework`; Android ships two AARs (`AlmediaLinkSDK.aar` for the SDK and `AlmediaLinkBridge.aar` for the Unity glue). Zero third-party runtime dependencies on the Unity side.
 
 ---
@@ -22,7 +22,7 @@ The SDK has three layers:
 |----------|------------------|--------------|
 | Unity    | 2022.3 LTS       | 2022.3.62f2  |
 | iOS      | 16.0             | 17.x, 18.x, 26.x |
-| Android  | API 27           | API 27-34    |
+| Android  | API 27           | API 27-36    |
 
 The native plugins pull standard AndroidX and Kotlin libraries - see the [integration guide](./Documentation~/integration-guide.md#android--gradle-dependencies).
 
@@ -36,7 +36,7 @@ In Unity: **Window > Package Manager > + > Add package from Git URL...** and pas
 https://github.com/almedia-tm/almedia-link-sdk.git
 ```
 
-Append `#vX.Y.Z` to pin a specific release, e.g. `...almedia-link-sdk.git#v1.0.1`.
+Append `#vX.Y.Z` to pin a specific release, e.g. `...almedia-link-sdk.git#v1.1.0`.
 
 After install, open **Almedia > Settings** and fill in the iOS and Android integration keys.
 
@@ -79,7 +79,7 @@ Drop one of the `LinkButton` prefabs (`LinkButtonA`, `LinkButtonB`, `LinkButtonC
 Three levels of depth, from least to most invasive. Full detail in [Customize the UI](./Documentation~/integration-guide.md#customize-the-ui).
 
 1. **Text and colors** - edit the strings and primary colors in **Almedia > Settings**. The built-in prefabs read the settings asset at runtime, so this works on a read-only UPM install.
-2. **Prefab Variants** - create a Prefab Variant of any bundled UI prefab (`LinkPopup`, `NotificationCard`, `ActivityOverlay`, `ATTPrePrompt`) and assign it under **Almedia > Settings > Prefab Overrides** for full re-skin / layout control.
+2. **Prefab Variants** - create a Prefab Variant of any bundled UI prefab (`LinkPopup`, `NotificationCard`, `ActivityOverlay`) and assign it under **Almedia > Settings > Prefab Overrides** for full re-skin / layout control.
 3. **Bring your own UI** - disable the default notification UI in settings and subscribe to `OnNotificationsReceived`, `OnStatusChanged`, and `OnLinkCompleted` to render your own visuals. The SDK still drives status, polling, and linking.
 
 ---
@@ -101,7 +101,7 @@ AlmediaLinkEditorMock.EmitNotifications(); // empty fetch
 #endif
 ```
 
-Surface: `EmitStatus`, `EmitError`, `EmitLinkCompleted`, `EmitNotifications`, `EmitShowATTPrePrompt`, `EmitNativeLog`, `CancelPending`.
+Surface: `EmitStatus`, `EmitError`, `EmitLinkCompleted`, `EmitNotifications`, `EmitScreenPresented`, `EmitScreenDismissed`, `EmitNativeLog`, `CancelPending`.
 
 - **Editor-only.** Lives in the `AlmediaLink.Editor` assembly (`includePlatforms:["Editor"]`); not present in iOS/Android player builds. Wrap host references in `#if UNITY_EDITOR` so your own code still compiles for device targets.
 - **Manual mode.** The first call to any `AlmediaLinkEditorMock` method puts the bridge into manual mode for the rest of the play session — the auto-simulate coroutines that fire `Eligible`/`linked` for the happy path stop firing, so they can't race against your emits. Manual mode resets on domain reload.

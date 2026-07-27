@@ -16,7 +16,6 @@ MonoBehaviour:
   _androidIntegrationKey: 
   _notificationPollIntervalSeconds: 30
   _enableDefaultNotificationUI: 1
-  _canRunConsentFlow: 0
   _popupTitle: Get Rewarded While Playing
   _benefit1Title: Earn real money & gift cards
   _benefit1Description: Convert your Word Farm gameplay into rewards.

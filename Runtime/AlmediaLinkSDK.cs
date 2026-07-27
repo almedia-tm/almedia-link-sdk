@@ -9,7 +9,7 @@ namespace AlmediaLink
 {
     public static class AlmediaLinkSDK
     {
-        public static string Version => "1.0.1";
+        public static string Version => "1.1.0";
 
         /// <summary>
         /// The SDK's current lifecycle status. Reads <see cref="AlmediaStatus.NotInitialized"/>
@@ -24,6 +24,27 @@ namespace AlmediaLink
         public static event Action<string> OnLinkCompleted;
         public static event Action<List<AlmediaNotification>> OnNotificationsReceived;
         public static event Action<AlmediaError> OnErrorOccurred;
+
+        /// <summary>
+        /// Fires when an SDK screen (linking webview, reward hub, offer) is now on top of the
+        /// game - pause gameplay here. Fires when the native container commits to presenting,
+        /// before the page loads. A call that opens nothing (wrong state, missing URL, a screen
+        /// already open, an <see cref="Engage"/> no-op) fires neither this nor
+        /// <see cref="OnScreenDismissed"/>. System-browser linking is not reported - only the
+        /// link callbacks fire for it. Every emission is followed by exactly one matching
+        /// <see cref="OnScreenDismissed"/>.
+        /// </summary>
+        public static event Action<AlmediaScreen> OnScreenPresented;
+
+        /// <summary>
+        /// Fires when the screen reported by <see cref="OnScreenPresented"/> is gone - resume
+        /// gameplay here. Exactly one per <see cref="OnScreenPresented"/>. Carries how the screen
+        /// was dismissed (<see cref="InAppScreenResultType.Completed"/>, Cancelled, or Failed with
+        /// an <see cref="AlmediaError"/>). Native completes its sync-on-close before this fires;
+        /// for webview linking it fires before the outcome link callbacks
+        /// (<see cref="OnLinkCompleted"/> etc.).
+        /// </summary>
+        public static event Action<AlmediaScreen, InAppScreenResult> OnScreenDismissed;
 
         public static event Action<AlmediaLogLevel, string> OnLog
         {
@@ -122,6 +143,50 @@ namespace AlmediaLink
             _bridge.StartLinking(placement);
         }
 
+        /// <summary>Opens the reward progression screen in a webview.</summary>
+        /// <remarks>
+        /// No-op (with a warning) until the SDK is ready. Native additionally requires a linked user
+        /// with a live progression URL; when that is absent the call is a no-op there, reported through
+        /// <see cref="OnLog"/>, and neither lifecycle event fires. When the screen appears,
+        /// <see cref="OnScreenPresented"/> fires with <see cref="AlmediaScreen.RewardHub"/> and its
+        /// dismissal is delivered via <see cref="OnScreenDismissed"/>.
+        /// </remarks>
+        public static void ShowRewardHub()
+        {
+            if (!GuardReady()) return;
+            AlmediaLog.Info("Showing reward hub");
+            _bridge.ShowRewardHub();
+        }
+
+        /// <summary>Opens the offer screen in a webview.</summary>
+        /// <remarks>
+        /// No-op (with a warning) until the SDK is ready. Native additionally requires a linked user
+        /// with a live offer URL - that URL can come and go between syncs, so a call that worked
+        /// earlier may later be a no-op there, reported through <see cref="OnLog"/>, and neither
+        /// lifecycle event fires. When the screen appears, <see cref="OnScreenPresented"/> fires with
+        /// <see cref="AlmediaScreen.Offer"/> and its dismissal is delivered via
+        /// <see cref="OnScreenDismissed"/>.
+        /// </remarks>
+        public static void ShowOffer()
+        {
+            if (!GuardReady()) return;
+            AlmediaLog.Info("Showing offer");
+            _bridge.ShowOffer();
+        }
+
+        /// <summary>
+        /// Context-aware entry point. Forwards to native, which routes on the player's state -
+        /// starts linking when eligible, opens the reward hub when linked, and no-ops (with a log
+        /// through <see cref="OnLog"/>) otherwise.
+        /// </summary>
+        /// <remarks>No-op (with a warning) until the SDK is ready.</remarks>
+        public static void Engage()
+        {
+            if (!GuardReady()) return;
+            AlmediaLog.Info("Engage requested");
+            _bridge.Engage();
+        }
+
         /// <summary>Issues a one-shot notification fetch.</summary>
         /// <remarks>No-op (with a warning) until the SDK is ready - the first
         /// <see cref="OnStatusChanged"/> must have fired.</remarks>
@@ -164,10 +229,10 @@ namespace AlmediaLink
             _bridge.TrackPromoLoad(state);
         }
 
-        internal static void TrackPromoClick()
+        internal static void TrackPromoClick(PromoState state)
         {
             if (!GuardInitialized()) return;
-            _bridge.TrackPromoClick();
+            _bridge.TrackPromoClick(state);
         }
 
         internal static void TrackPopupShow()
@@ -213,6 +278,8 @@ namespace AlmediaLink
             OnLinkCompleted = null;
             OnNotificationsReceived = null;
             OnErrorOccurred = null;
+            OnScreenPresented = null;
+            OnScreenDismissed = null;
             AlmediaLog.ClearSubscribers();
             AlmediaLinkUIManager.Cleanup();
             _bridge = null;
@@ -255,12 +322,18 @@ namespace AlmediaLink
             OnErrorOccurred?.Invoke(AlmediaError.FromCallback(response));
         }
 
-        private static void HandleShowATTPrePrompt()
+        private static void HandleScreenPresented(AlmediaScreen screen)
         {
-            AlmediaLog.Info("Native requested ATT pre-prompt.");
-            AlmediaLinkUIManager.ShowATTPrePrompt();
+            AlmediaLog.Info($"Screen presented: {screen}");
+            OnScreenPresented?.Invoke(screen);
         }
 
+        private static void HandleScreenDismissed(AlmediaScreen screen, ScreenDismissedResponse response)
+        {
+            var result = InAppScreenResult.FromResponse(response);
+            AlmediaLog.Info($"Screen dismissed: {screen} ({result.Type})");
+            OnScreenDismissed?.Invoke(screen, result);
+        }
 
         private static bool GuardInitialized()
         {
@@ -293,7 +366,8 @@ namespace AlmediaLink
             AlmediaLinkBridge.LinkCompleted += HandleLinkCompleted;
             AlmediaLinkBridge.NotificationsReceived += HandleNotificationsReceived;
             AlmediaLinkBridge.ErrorOccurred += HandleErrorOccurred;
-            AlmediaLinkBridge.ShowATTPrePromptRequested += HandleShowATTPrePrompt;
+            AlmediaLinkBridge.ScreenPresented += HandleScreenPresented;
+            AlmediaLinkBridge.ScreenDismissed += HandleScreenDismissed;
         }
 
         private static void UnsubscribeFromBridge()
@@ -302,7 +376,8 @@ namespace AlmediaLink
             AlmediaLinkBridge.LinkCompleted -= HandleLinkCompleted;
             AlmediaLinkBridge.NotificationsReceived -= HandleNotificationsReceived;
             AlmediaLinkBridge.ErrorOccurred -= HandleErrorOccurred;
-            AlmediaLinkBridge.ShowATTPrePromptRequested -= HandleShowATTPrePrompt;
+            AlmediaLinkBridge.ScreenPresented -= HandleScreenPresented;
+            AlmediaLinkBridge.ScreenDismissed -= HandleScreenDismissed;
         }
     }
 }

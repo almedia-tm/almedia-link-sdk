@@ -18,6 +18,9 @@ The SDK is versioned. The current release is reflected in `AlmediaLinkSDK.Versio
   - [`AlmediaErrorCode`](#almediaerrorcode)
   - [`AlmediaNotification`](#almedianotification)
   - [`PlacementType`](#placementtype)
+  - [`AlmediaScreen`](#almediascreen)
+  - [`InAppScreenResult`](#inappscreenresult)
+  - [`InAppScreenResultType`](#inappscreenresulttype)
   - [`AlmediaLogLevel`](#almedialoglevel)
 - [Editor testing](#editor-testing)
   - [`AlmediaLinkEditorMock`](#almedialinkeditormock)
@@ -27,7 +30,6 @@ The SDK is versioned. The current release is reflected in `AlmediaLinkSDK.Versio
   - [`LinkPopupController`](#linkpopupcontroller)
   - [`NotificationCardController`](#notificationcardcontroller)
   - [`ActivityOverlayController`](#activityoverlaycontroller)
-  - [`ATTPrePromptController`](#attprepromptcontroller)
   - [`NotificationIconMap`](#notificationiconmap)
 - [Prefabs](#prefabs)
 - [Editor menu items](#editor-menu-items)
@@ -40,7 +42,7 @@ The SDK is versioned. The current release is reflected in `AlmediaLinkSDK.Versio
 | Namespace            | Contents |
 |----------------------|----------|
 | `AlmediaLink`        | The static `AlmediaLinkSDK` facade, `AlmediaLinkConfig`, `AlmediaLinkSettings`, `AlmediaLogLevel`. |
-| `AlmediaLink.Models` | Status, error, notification, placement types. |
+| `AlmediaLink.Models` | Status, error, notification, placement, and in-app screen result types. |
 | `AlmediaLink.UI`     | UI controllers and `NotificationIconMap`. |
 | `AlmediaLink.Editor` | Editor-only tooling (Settings window, iOS post-build hook). Excluded from player builds. |
 | `AlmediaLink.Editor.Testing` | `AlmediaLinkEditorMock` and `MockNotification` - editor-only test hooks for driving non-happy paths. Excluded from player builds. |
@@ -105,6 +107,32 @@ Opens the native account-linking flow. The `placement` value is analytics metada
 
 A no-op (with a warning logged via `OnLog`) if `Initialize` has not been called, or if the SDK has not yet reached a terminal status (the first `OnStatusChanged` has not fired).
 
+#### `static void ShowRewardHub()`
+
+Opens the reward progression screen in a webview. When the screen appears, [`OnScreenPresented`](#static-event-actionalmediascreen-onscreenpresented) fires with `AlmediaScreen.RewardHub`, and its dismissal is reported through [`OnScreenDismissed`](#static-event-actionalmediascreen-inappscreenresult-onscreendismissed).
+
+A no-op (with a warning) until the SDK is ready. Safe to call in any state: native opens the screen only for a linked player with a live progression URL, and otherwise no-ops with the reason logged through `OnLog` - a no-op call fires neither lifecycle event.
+
+#### `static void ShowOffer()`
+
+Opens the offer screen in a webview. When the screen appears, [`OnScreenPresented`](#static-event-actionalmediascreen-onscreenpresented) fires with `AlmediaScreen.Offer`, and its dismissal is reported through [`OnScreenDismissed`](#static-event-actionalmediascreen-inappscreenresult-onscreendismissed).
+
+A no-op (with a warning) until the SDK is ready. Safe to call in any state: native opens the screen only for a linked player with a live offer URL, and otherwise no-ops with the reason logged through `OnLog` - a no-op call fires neither lifecycle event. Unlike the progression URL, the offer URL can appear and disappear between syncs, so a call that opened the screen earlier in the session may later be a no-op.
+
+#### `static void Engage()`
+
+Context-aware entry point. Forwards to native, which routes on the player's state:
+
+| Player state | Native action |
+|---|---|
+| `Eligible` | starts linking |
+| `Linked` | opens the reward hub |
+| anything else | no-op + log with the reason |
+
+**All routing lives in native - Unity does not switch on status.** `Engage()` forwards the call whenever the SDK is ready, regardless of the current status; the state-based decision (including the no-op case) happens on the native side and is reported through `OnLog`. A no-op (with a warning) until the SDK is ready.
+
+Use this as the single action behind a custom host button that should "do the right thing" for the player.
+
 #### `static void FetchNotifications()`
 
 Issues a one-shot request for the latest reward notifications. Result arrives via `OnNotificationsReceived` if there are any. A no-op (with a warning) until the SDK is ready - i.e. before the first `OnStatusChanged` has fired.
@@ -149,6 +177,26 @@ Fires when a polling tick or `FetchNotifications()` returns one or more notifica
 
 Fires for both synchronous (local validation) and asynchronous (native, network) errors. See [`AlmediaErrorCode`](#almediaerrorcode) for the full set.
 
+#### `static event Action<AlmediaScreen> OnScreenPresented`
+
+Fires when an SDK screen ([`AlmediaScreen`](#almediascreen): the linking webview, the reward hub, or an offer) is now on top of the game - pause gameplay here. It fires at the moment the native container commits to presenting, **before** the page loads, so a slow network cannot delay the pause.
+
+The event fires for every trigger that actually presents a screen: the API methods (`StartLinking`, `ShowRewardHub`, `ShowOffer`), the `LinkButton` prefab, and `Engage()` routing.
+
+**Matched-pair guarantee.** Every screen that appears produces exactly one `OnScreenPresented` and, later, exactly one matching [`OnScreenDismissed`](#static-event-actionalmediascreen-inappscreenresult-onscreendismissed):
+
+| Scenario | `OnScreenPresented` | `OnScreenDismissed` |
+|---|---|---|
+| A screen actually appears | exactly one | exactly one (later, matching) |
+| Call opens nothing (wrong state, missing URL, a screen already open, `Engage()` no-op) | never | never |
+| System-browser linking (web-browser strategy) | never | never - only the link callbacks fire |
+
+#### `static event Action<AlmediaScreen, InAppScreenResult> OnScreenDismissed`
+
+Fires when the screen reported by [`OnScreenPresented`](#static-event-actionalmediascreen-onscreenpresented) is gone - resume gameplay here. Exactly one per `OnScreenPresented` (see the matched-pair table above). The [`InAppScreenResult`](#inappscreenresult) argument reports how the screen was dismissed - `Completed` (closed by the web client), `Cancelled` (user closed it), or `Failed` (it could not load, with the detail in `Error`).
+
+Native completes its sync-on-close **before** this fires, so state read in the handler (e.g. `CurrentStatus`) already reflects anything that happened inside the screen. For webview linking the pair fires in addition to the link callbacks, and `OnScreenDismissed` fires before the outcome callbacks (`OnLinkCompleted` / `OnErrorOccurred`).
+
 #### `static event Action<AlmediaLogLevel, string> OnLog`
 
 Fires for every log line emitted by the SDK, including forwarded logs from the native plugins. No subscribers means no console output - the SDK does not call `UnityEngine.Debug` directly. Wire this into your own logging pipeline as needed.
@@ -178,7 +226,6 @@ Mutable POCO you build at runtime and pass to `Initialize`. Code-supplied values
 | `AppsFlyerId`                                      | `string`  | none (config only)                              |
 | `AccountId`                                        | `string`  | none (config only)                              |
 | `NotificationsPollingIntervalSec`                  | `int?`    | settings (`NotificationPollIntervalSeconds`) → 30 |
-| `CanRunConsentFlow`                                | `bool?`   | settings (`CanRunConsentFlow`) → false          |
 
 **Platform selection.** During `Initialize`, the bridge picks `IosIntegrationKey` on iOS builds and `AndroidIntegrationKey` on Android builds. In the Editor, the SDK prefers iOS but falls back to Android if iOS is empty. Only the platform-relevant key is forwarded to the native layer.
 
@@ -210,7 +257,6 @@ All properties are read-only from outside the asset (set via the Unity Inspector
 | `AndroidIntegrationKey`           | `string` | empty   | Almedia-issued key for Android. |
 | `NotificationPollIntervalSeconds` | `int`    | 30      | Notification polling cadence. Min 5. |
 | `EnableDefaultNotificationUI`     | `bool`   | true    | When false, SDK does not show its NotificationCard or ActivityOverlay; host receives `OnNotificationsReceived` and renders. |
-| `CanRunConsentFlow`               | `bool`   | false   | When true, iOS ATT pre-prompt + system dialog run during init, and the iOS post-build hook injects `NSUserTrackingUsageDescription` into `Info.plist`. |
 
 #### Link Popup
 
@@ -233,21 +279,6 @@ All properties are read-only from outside the asset (set via the Unity Inspector
 |--------------------------------|---------|-------------|
 | `NotificationBackgroundColor`  | `Color` | Notification card background. |
 
-#### ATT Pre-Prompt (iOS)
-
-| Property                  | Type     | Description |
-|---------------------------|----------|-------------|
-| `AttPromptTitle`          | `string` | Top title of the pre-prompt screen. |
-| `AttRewardAmount`         | `string` | Highlighted reward amount, e.g. `"$9.38"`. |
-| `AttWhyTitle`             | `string` | "Why do we need this?" header. |
-| `AttWhyBody`              | `string` | Body copy under the why header. |
-| `AttControlTitle`         | `string` | "You're in control" header. |
-| `AttControlBody`          | `string` | Body copy under the control header. |
-| `AttContinueButtonText`   | `string` | Primary button label. |
-| `AttBackgroundColor`      | `Color`  | Pre-prompt background. |
-| `AttPrimaryButtonColor`   | `Color`  | Primary button fill. |
-| `AttButtonTextColor`      | `Color`  | Primary button text color. |
-
 #### Prefab Overrides
 
 | Property                  | Type                          | Description |
@@ -255,7 +286,6 @@ All properties are read-only from outside the asset (set via the Unity Inspector
 | `LinkPopupOverride`       | `LinkPopupController`         | Prefab Variant to instantiate instead of the SDK default. |
 | `NotificationCardOverride`| `NotificationCardController`  | Prefab Variant for the notification card. |
 | `ActivityOverlayOverride` | `ActivityOverlayController`   | Prefab Variant for the notification list overlay. |
-| `AttPrePromptOverride`    | `ATTPrePromptController`      | Prefab Variant for the ATT pre-prompt. |
 
 ---
 
@@ -358,6 +388,54 @@ Behaviorally identical - the difference is reflected only in analytics.
 
 ---
 
+### `AlmediaScreen`
+
+Namespace: `AlmediaLink.Models` · enum
+
+Identifies which SDK screen a lifecycle event is about. Delivered to [`OnScreenPresented`](#static-event-actionalmediascreen-onscreenpresented) and [`OnScreenDismissed`](#static-event-actionalmediascreen-inappscreenresult-onscreendismissed).
+
+| Value       | Native string  | Meaning |
+|-------------|----------------|---------|
+| `Linking`   | `"linking"`    | The account-linking flow shown in an in-app webview. System-browser linking is not reported. |
+| `RewardHub` | `"reward_hub"` | The reward progression screen ([`ShowRewardHub()`](#static-void-showrewardhub) or `Engage()` routing). |
+| `Offer`     | `"offer"`      | The offer screen ([`ShowOffer()`](#static-void-showoffer)). |
+
+An unrecognized screen string from native is logged as a warning and the callback is dropped - the events never fire with a garbage value.
+
+---
+
+### `InAppScreenResult`
+
+Namespace: `AlmediaLink.Models` · class
+
+How an in-app screen was dismissed. Delivered to [`OnScreenDismissed`](#static-event-actionalmediascreen-inappscreenresult-onscreendismissed).
+
+```csharp
+public InAppScreenResultType Type  { get; }
+public AlmediaError          Error { get; }
+```
+
+| Property | Notes |
+|----------|-------|
+| `Type`   | See [`InAppScreenResultType`](#inappscreenresulttype). |
+| `Error`  | Populated only when `Type` is `Failed`; `null` for every other outcome. |
+
+---
+
+### `InAppScreenResultType`
+
+Namespace: `AlmediaLink.Models` · enum
+
+| Value       | Native string | Meaning |
+|-------------|---------------|---------|
+| `Completed` | `"completed"` | The web client closed the screen through its JS bridge. |
+| `Cancelled` | `"cancelled"` | The player closed the screen with the close/back button. |
+| `Failed`    | `"failed"`    | The screen could not load. `InAppScreenResult.Error` carries the detail. |
+
+An unrecognized value from native is treated as `Cancelled` and logged.
+
+---
+
 ### `AlmediaLogLevel`
 
 Namespace: `AlmediaLink` · enum
@@ -379,7 +457,7 @@ public enum AlmediaLogLevel
 
 ## Editor testing
 
-Editor-only test hook for driving the SDK into any state (status, error, notifications, ATT pre-prompt, native log) from a play-mode test or an editor host script. See [Driving non-happy paths](./integration-guide.md#driving-non-happy-paths) in the integration guide for the narrative.
+Editor-only test hook for driving the SDK into any state (status, error, notifications, native log) from a play-mode test or an editor host script. See [Driving non-happy paths](./integration-guide.md#driving-non-happy-paths) in the integration guide for the narrative.
 
 The whole API lives in `AlmediaLink.Editor.Testing` (assembly `AlmediaLink.Editor`, `includePlatforms:["Editor"]`). Host references must be wrapped in `#if UNITY_EDITOR` so they don't reach iOS/Android player compilation.
 
@@ -389,7 +467,7 @@ The whole API lives in `AlmediaLink.Editor.Testing` (assembly `AlmediaLink.Edito
 
 Namespace: `AlmediaLink.Editor.Testing` · static class
 
-The first call to any method here puts the underlying editor mock into **manual mode** for the rest of the play session: every subsequent `Initialize` / `StartLinking` / `FetchNotifications` / `ContinueWithATT` / `SkipATT` becomes a no-op so canned coroutines cannot race against test emissions, and any already-scheduled simulate coroutine is cancelled on the flip. Manual mode resets on domain reload.
+The first call to any method here puts the underlying editor mock into **manual mode** for the rest of the play session: every subsequent `Initialize` / `StartLinking` / `FetchNotifications` becomes a no-op so canned coroutines cannot race against test emissions, and any already-scheduled simulate coroutine is cancelled on the flip. Manual mode resets on domain reload.
 
 Every method **throws `InvalidOperationException`** if called before `AlmediaLinkSDK.Initialize` - the throw is deliberate so test ordering bugs surface at test-author time instead of as silent no-ops.
 
@@ -409,9 +487,13 @@ Fires `OnLinkCompleted` with the current UTC timestamp. Use it to test "celebrat
 
 Fires `OnNotificationsReceived` with the supplied items, converted into the SDK's internal model. Pass no arguments for an empty batch (note: `AlmediaLinkSDK` short-circuits empty batches and does **not** raise `OnNotificationsReceived` - useful for verifying the "no new rewards" branch on the SDK side).
 
-#### `static void EmitShowATTPrePrompt()`
+#### `static void EmitScreenPresented(AlmediaScreen screen)`
 
-Triggers the iOS ATT pre-prompt UI flow as if the native layer had requested it. Use this to exercise the `ATTPrePromptController` branches without iOS-specific build configuration.
+Fires `OnScreenPresented` for the given screen, without opening a real webview. Pair it with a later `EmitScreenDismissed` for the same screen to reproduce native's matched-pair contract in a test.
+
+#### `static void EmitScreenDismissed(AlmediaScreen screen, InAppScreenResultType result, AlmediaErrorCode errorCode = AlmediaErrorCode.Unknown, string errorMessage = null)`
+
+Fires `OnScreenDismissed` for the given screen with the given result. `errorCode` and `errorMessage` apply only to [`InAppScreenResultType.Failed`](#inappscreenresulttype) and are ignored for the completed/cancelled outcomes.
 
 #### `static void EmitNativeLog(AlmediaLogLevel level, string message)`
 
@@ -454,9 +536,9 @@ All UI controllers live in `AlmediaLink.UI`. The SDK ships ready-to-drop prefabs
 
 ### `LinkButtonController`
 
-The component on the `LinkButton` prefabs. Auto-shows when `AlmediaStatus == Eligible` and auto-hides on every other status. Tapping it opens the `LinkPopup`.
+The component on the `LinkButton` prefabs. Two-state: visible while `Eligible` (a linking entry - tapping opens the `LinkPopup`) and while `Linked` (a rewards entry - tapping opens the reward hub via `ShowRewardHub()`); hidden in every other status. Each state is a self-contained subtree in the prefab (`Eligible` / `Linked`, each pairing a content object with its own button and background), so its art and press colours are authored in the prefab and the controller only toggles which one shows.
 
-Drop one of the four `LinkButton` variants (`LinkButtonA`-`LinkButtonD`) into your Canvas - no code needed.
+Drop one of the four `LinkButton` variants (`LinkButtonA`-`LinkButtonD`) into your Canvas - no code needed. To reproduce the behaviour on a button of your own, `AlmediaLinkSDK.Engage()` is the one-call equivalent (it links directly rather than opening the popup - see [`Engage()`](#static-void-engage)).
 
 ---
 
@@ -481,14 +563,6 @@ Customize via Prefab Variant assigned in **Almedia → Settings → Prefab Overr
 The component on the `ActivityOverlay` prefab. Full-screen notification list, opened by tapping a stacked `NotificationCard`.
 
 Customize via Prefab Variant assigned in **Almedia → Settings → Prefab Overrides → Activity Overlay**.
-
----
-
-### `ATTPrePromptController`
-
-The component on the `ATTPrePrompt` prefab. iOS-only screen shown before Apple's ATT system dialog when `CanRunConsentFlow` is enabled.
-
-Customize via Prefab Variant assigned in **Almedia → Settings → Prefab Overrides → ATT Pre-Prompt**. Text and colors are also editable in **Almedia → Settings → ATT Pre-Prompt Text (iOS)**.
 
 ---
 
@@ -517,7 +591,6 @@ All shipping prefabs live under `Packages/com.almedia.link/Runtime/Resources/Pre
 | `LinkPopup.prefab`        | `LinkPopupController`        |
 | `NotificationCard.prefab` | `NotificationCardController` |
 | `ActivityOverlay.prefab`  | `ActivityOverlayController`  |
-| `ATTPrePrompt.prefab`     | `ATTPrePromptController`     |
 
 ---
 

@@ -23,6 +23,5 @@ namespace AlmediaLink
         public string AppsFlyerId { get; set; }
         public string AccountId { get; set; }
         public int NotificationsPollingIntervalSec { get; set; }
-        public bool CanRunConsentFlow { get; set; }
     }
 }
