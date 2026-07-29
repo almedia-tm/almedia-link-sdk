@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.1.1-preview.1] - 2026-07-28
+## [1.1.1] - 2026-07-29
 
 ### Changed
 - In-app screens (linking, reward hub, offer) now present transparently over the running game: it stays visible behind a screen while that screen's content loads, instead of being hidden by an opaque background.

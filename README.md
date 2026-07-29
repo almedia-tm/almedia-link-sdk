@@ -36,7 +36,7 @@ In Unity: **Window > Package Manager > + > Add package from Git URL...** and pas
 https://github.com/almedia-tm/almedia-link-sdk.git
 ```
 
-Append `#vX.Y.Z` to pin a specific release, e.g. `...almedia-link-sdk.git#v1.1.0`.
+Append `#vX.Y.Z` to pin a specific release, e.g. `...almedia-link-sdk.git#v1.1.1`.
 
 After install, open **Almedia > Settings** and fill in the iOS and Android integration keys.
 
