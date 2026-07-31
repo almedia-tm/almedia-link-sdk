@@ -22,7 +22,7 @@ The SDK has three layers:
 |----------|------------------|--------------|
 | Unity    | 2022.3 LTS       | 2022.3.62f2  |
 | iOS      | 16.0             | 17.x, 18.x, 26.x |
-| Android  | API 27           | API 27-36    |
+| Android  | API 25           | API 27-36    |
 
 The native plugins pull standard AndroidX and Kotlin libraries - see the [integration guide](./Documentation~/integration-guide.md#android--gradle-dependencies).
 

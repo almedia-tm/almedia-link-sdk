@@ -99,6 +99,8 @@ Subscribe to `OnErrorOccurred` **before** calling `Initialize` to receive synchr
 
 **Idempotency.** Calling `Initialize` again with the **same effective configuration** is a no-op: `CurrentStatus` is preserved and the native layer is not contacted again (the call is logged at `Info` level). This holds whether the first call is still in flight or has already reached a terminal status. Calling `Initialize` with a **different** configuration tears down the current session and re-initializes - `CurrentStatus` returns to `NotInitialized` for the transition and then resolves again, driven by the native layer. The native bridge instance is reused across calls; it is never recreated.
 
+**OS support floor.** On devices below **iOS 16** or **Android API 25**, initialization completes normally but resolves to `AlmediaStatus.NotAvailable`, and every further SDK call is inert - nothing crosses into native code. A single warning stating the device OS version and the required one is reported through [`OnLog`](#static-event-actionalmedialoglevel-string-onlog); it is the only diagnostic emitted below the floor, so wire `OnLog` into your logging pipeline if you need to distinguish this case from the other `NotAvailable` causes in the field. On devices at or above the floor, behavior is unchanged. Editor play mode is unaffected.
+
 #### `static void StartLinking(PlacementType placement = PlacementType.Popup)`
 
 Opens the native account-linking flow. The `placement` value is analytics metadata - it tells the backend which UI surface drove the call.

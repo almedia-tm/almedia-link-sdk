@@ -12,7 +12,7 @@ android {
     buildToolsVersion buildTools
 
     defaultConfig {
-        minSdk 27
+        minSdk 23
     }
 
     // This .androidlib is flat (manifest at the folder root, not src/main/), point AGP at it.
