@@ -56,15 +56,15 @@ Internally, the native SDKs perform I/O off the main thread and post results bac
 | Item             | Minimum         | Tested on                |
 |------------------|-----------------|--------------------------|
 | Unity Editor     | 2022.3 LTS      | 2022.3.62f2              |
-| iOS              | 16.0            | 17.x, 18.x               |
-| Android API      | 25              | API 27-36                |
+| iOS              | 13.0            | 16.x, 17.x, 18.x, 26.x   |
+| Android API      | 23              | API 25-36                |
 | TextMeshPro      | 3.0.6           | (declared as a dependency) |
 
 Additional requirements:
 
 - An **iOS integration key** and an **Android integration key** issued by Almedia.
 - For iOS builds: a non-empty `NSUserTrackingUsageDescription` in the final `Info.plist` (required for ATT-gated IDFA reading). The SDK writes a default value on build - see [iOS - App Tracking Transparency](#ios--app-tracking-transparency).
-- For Android builds: `minSdkVersion 23` (or higher) in the Gradle template. That is the build-time floor; the SDK itself is inert below API 25 - see [`minSdkVersion`](#minsdkversion).
+- For Android builds: `minSdkVersion 23` (or higher) in the Gradle template. On devices below Android API 25 the SDK disables itself cleanly and reports `NotAvailable`. Builds below minSdk 24 need a dexer pin on Unity 2022.3, which the SDK applies automatically - see [Building below minSdk 24](#building-below-minsdk-24).
 
 The SDK ships with **zero third-party runtime dependencies on the Unity side**. The native plugins pull standard AndroidX and Kotlin libraries - see [Android - Gradle dependencies](#android--gradle-dependencies).
 
@@ -576,7 +576,41 @@ The `.androidlib`'s `build.gradle` reads `unity.compileSdkVersion` and `unity.bu
 
 ### `minSdkVersion`
 
-The `.androidlib` declares `minSdk 23`, matching the native AARs. Host apps with a lower **Minimum API Level** (Player Settings → Android → Other Settings) will fail at manifest merge with a clear error.
+The `.androidlib` declares `minSdk 23`, so any **Minimum API Level** (Player Settings → Android → Other Settings) of 23 or higher builds. The runtime floor is higher than the build floor: on devices below Android API 25 the SDK disables itself cleanly - `Initialize()` completes with status `NotAvailable`, a single warning through `OnLog` states the device OS version and the required one, and every further SDK call is inert.
+
+### Building below minSdk 24
+
+Unity 2022.3 ships AGP 7.4.2, whose embedded dexer crashes on any library built with Kotlin 1.9 or newer (`ERROR:D8: com.android.tools.r8.kotlin.H`) - but only when `minSdkVersion` is below 24, because that is when interface-method desugaring parses library metadata. The SDK's AARs and their kotlinx dependencies are built with Kotlin 2.x, so such builds need a newer dexer than the one AGP 7.x embeds.
+
+**Host projects do not configure any of this.** When a build targets minSdk < 24 on AGP 7.x, the SDK pins a modern dexer into the exported root `build.gradle` automatically and logs what it did to the Console. The pin is a fenced, self-describing block:
+
+```groovy
+// >>> ALMEDIA_LINK_R8_PIN (added by the Almedia Link SDK - do not edit between the markers)
+// AGP 7.x's embedded D8 crashes on Kotlin >= 1.9 metadata when desugaring for
+// minSdk < 24 (ERROR:D8: com.android.tools.r8.kotlin.H). Pin a modern dexer
+// ahead of it on the classpath.
+// To take over: replace this whole block with your own com.android.tools:r8
+// classpath pin (with any repositories you need) - the SDK never overrides an
+// existing pin and stops injecting this block once it sees yours.
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools:r8:8.3.37'
+    }
+}
+// <<< ALMEDIA_LINK_R8_PIN
+```
+
+The rules:
+
+- **Builds at minSdk 24+ and builds on AGP 8+ (Unity 6) are left untouched.** Their dexer already handles Kotlin 2.x metadata; pinning there could downgrade it.
+- **An existing `com.android.tools:r8` classpath pin is never overridden** - neither the host's nor another plugin's. To control the R8 version or the repositories yourself, put your own pin at the top of the **Custom Base Gradle Template** (Player Settings → Publishing Settings); the SDK detects it and stops injecting.
+- **The block is refreshed, not stacked.** Rebuilding over an already-patched export replaces the fenced block in place. If the project later moves to AGP 8+ or gains its own pin, the block is removed again.
+
+If the SDK cannot recognize the exported root `build.gradle` - a heavily customized Base Gradle Template, for example - nothing is injected and the build logs a warning containing the exact block to add by hand. See [Troubleshooting](#troubleshooting).
 
 ---
 
@@ -727,6 +761,9 @@ The SDK copies the default asset once after import. If that did not happen, forc
 
 **Android build fails with "duplicate class" or D8 dexing errors.**
 A conflicting version of an AndroidX or Kotlin library is likely present. Most often this means another plugin pulled a newer `androidx.datastore:datastore-preferences` past the SDK's 1.0.0 pin — inspect the generated Gradle output (Library/Bee/Android) and check the resolved version. If a stale `// >>> almedia-link deps` block from an older SDK version is still in `Assets/Plugins/Android/mainTemplate.gradle`, delete it (the SDK no longer manages that block — deps come from `AlmediaLink.androidlib`). If EDM4U is in use, force a re-resolve via **Assets → External Dependency Manager → Android Resolver → Resolve**.
+
+**Android build fails with `ERROR:D8: com.android.tools.r8.kotlin.H`.**
+The build targets minSdk < 24 on AGP 7.x and the dexer pin is missing - see [Building below minSdk 24](#building-below-minsdk-24). The SDK injects the pin automatically on export, so check the Console for `[AlmediaLink]` lines from the last build. A warning means the SDK could not patch the exported project; it contains the exact block to add by hand - enable **Player Settings → Publishing Settings → Custom Base Gradle Template** and paste the block at the top of `Assets/Plugins/Android/baseProjectTemplate.gradle` (or, when using Export Project, at the top of the exported root `build.gradle`). No `[AlmediaLink]` lines at all usually means the SDK's Editor assembly did not compile - fix any Console compile errors and rebuild.
 
 **iOS build is missing `NSUserTrackingUsageDescription`.**
 The SDK's post-build hook adds a default value on every iOS build (unless the host or another SDK already set it). If it's still missing, confirm another post-processor isn't stripping it; you can always set the key explicitly via **Player Settings → iOS → Other Settings → Custom Info.plist entries**.

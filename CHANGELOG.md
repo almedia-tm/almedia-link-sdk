@@ -2,10 +2,13 @@
 
 ## [Unreleased]
 
-## [1.1.2-preview.1] - 2026-07-31
+## [1.1.2-preview.2] - 2026-08-04
 
 ### Added
 - OS support floor. On devices below iOS 16 / Android API 25 the SDK disables itself cleanly: `Initialize()` completes with status `NotAvailable`, a single warning reported through `OnLog` states the device OS version and the required one, and every further SDK call is inert - no C# code path touches the native libraries. Devices at or above the floor are unchanged, as is Editor play mode.
+
+### Fixed
+- Android builds with minSdk below 24 no longer fail with `ERROR:D8: com.android.tools.r8.kotlin.H` on Unity 2022.3. The editor's AGP 7.4.2 ships a dexer that crashes on libraries built with Kotlin 1.9+ while desugaring for minSdk < 24; the SDK now pins a modern dexer (`com.android.tools:r8:8.3.37`) into the exported Gradle project automatically when it detects that combination. Builds at minSdk 24+, on AGP 8+, or with an existing R8 pin are left untouched. The injected block is fenced by `ALMEDIA_LINK_R8_PIN` markers: a stale block from an older SDK version is refreshed in place, and the block is removed again if the project moves to AGP 8+ or gains its own pin. When the exported `build.gradle` cannot be recognized, the build logs a warning containing the exact block to add by hand - see "Building below minSdk 24" in the integration guide.
 
 ## [1.1.1] - 2026-07-29
 
