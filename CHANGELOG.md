@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.1.2-preview.3] - 2026-08-04
+## [1.1.2] - 2026-08-04
 
 ### Added
 - OS support floor. On devices below iOS 16 / Android API 25 the SDK disables itself cleanly: `Initialize()` completes with status `NotAvailable`, a single warning reported through `OnLog` states the device OS version and the required one, and every further SDK call is inert - no C# code path touches the native libraries. Devices at or above the floor are unchanged, as is Editor play mode.
