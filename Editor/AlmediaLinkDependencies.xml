@@ -15,12 +15,14 @@
 -->
 <dependencies>
     <androidPackages>
-        <!-- Kotlin coroutines -->
-        <androidPackage spec="org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"/>
-        <androidPackage spec="org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"/>
+        <!-- Kotlin coroutines. 1.7.3 is the last release built with Kotlin 1.8 -
+             newer ones carry Kotlin >= 1.9 metadata that crashes D8 on AGP 7.x
+             (Unity 2022.3) when desugaring for minSdk < 24. -->
+        <androidPackage spec="org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"/>
+        <androidPackage spec="org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"/>
 
-        <!-- Kotlin serialization -->
-        <androidPackage spec="org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0"/>
+        <!-- Kotlin serialization. 1.5.1 for the same reason: last Kotlin 1.8 build. -->
+        <androidPackage spec="org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1"/>
 
         <!-- AndroidX -->
         <androidPackage spec="androidx.lifecycle:lifecycle-runtime-ktx:2.6.2"/>
