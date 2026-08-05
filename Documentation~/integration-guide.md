@@ -55,16 +55,16 @@ Internally, the native SDKs perform I/O off the main thread and post results bac
 
 | Item             | Minimum         | Tested on                |
 |------------------|-----------------|--------------------------|
-| Unity Editor     | 2022.3 LTS      | 2022.3.62f2              |
-| iOS              | 16.0            | 17.x, 18.x               |
-| Android API      | 27              | API 27-36                |
+| Unity Editor     | 2022.3 LTS      | 2022.3.62f2, 6000.4.9f1              |
+| iOS              | 13.0            | 16.x, 17.x, 18.x, 26.x               |
+| Android API      | 23              | API 27-37                |
 | TextMeshPro      | 3.0.6           | (declared as a dependency) |
 
 Additional requirements:
 
 - An **iOS integration key** and an **Android integration key** issued by Almedia.
 - For iOS builds: a non-empty `NSUserTrackingUsageDescription` in the final `Info.plist` (required for ATT-gated IDFA reading). The SDK writes a default value on build - see [iOS - App Tracking Transparency](#ios--app-tracking-transparency).
-- For Android builds: `minSdkVersion 27` (or higher) in the Gradle template.
+- For Android builds: `minSdkVersion 23` (or higher) in the Gradle template.
 
 The SDK ships with **zero third-party runtime dependencies on the Unity side**. The native plugins pull standard AndroidX and Kotlin libraries - see [Android - Gradle dependencies](#android--gradle-dependencies).
 
@@ -576,7 +576,7 @@ The `.androidlib`'s `build.gradle` reads `unity.compileSdkVersion` and `unity.bu
 
 ### `minSdkVersion`
 
-The `.androidlib` declares `minSdk 27`. Host apps with a lower **Minimum API Level** (Player Settings → Android → Other Settings) will fail at manifest merge with a clear error. The native AAR genuinely requires 27+, so this is enforced rather than absorbed.
+The `.androidlib` declares `minSdk 23`. Host apps with a lower **Minimum API Level** (Player Settings → Android → Other Settings) will fail at manifest merge with a clear error. 
 
 ---
 
