@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-08-05
+
+### Fixed
+- Fixed an issue on Android where host apps compiled with `minSdk` 23 would not receive `OnLinkCompleted` after linking - and therefore dispensed no in-game rewards - leaving the SDK stuck in the `Eligible` state. The SDK's internal lifecycle observer never attached in such builds, so the post-linking sync that promotes the player to `Linked` never ran.
+
 ## [1.1.2] - 2026-08-04
 
 ### Added
