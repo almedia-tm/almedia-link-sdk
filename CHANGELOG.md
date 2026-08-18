@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-08-18
+
+### Fixed
+- Fixed a crash on Android when the player quits. Callbacks that arrived from native while Unity was tearing the player down called `UnitySendMessage` on an engine whose message queue was already gone, killing the process. The SDK now stops delivering callbacks to Unity the moment player teardown starts, and resumes on the next `Initialize()`.
+
 ## [1.1.3] - 2026-08-05
 
 ### Fixed

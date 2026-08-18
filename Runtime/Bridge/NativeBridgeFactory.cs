@@ -56,6 +56,8 @@ namespace AlmediaLink.Bridge
             return _instance;
         }
 
+        internal static void NotifyPlayerQuitting() => _instance?.NotifyPlayerQuitting();
+
 #if UNITY_ANDROID && !UNITY_EDITOR
         private static int ReadAndroidSdkInt()
         {

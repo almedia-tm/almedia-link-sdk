@@ -60,6 +60,9 @@ namespace AlmediaLink.Bridge
         [DllImport("__Internal")]
         private static extern void AlmediaLink_TrackATTPreliminaryShow();
 
+        [DllImport("__Internal")]
+        private static extern void AlmediaLink_NotifyPlayerQuitting();
+
         public void Initialize(string json) => AlmediaLink_Initialize(json);
         public void StartLinking(PlacementType placement) => AlmediaLink_StartLinking(placement.ToNativeString());
         public void ShowRewardHub() => AlmediaLink_ShowRewardHub();
@@ -78,6 +81,7 @@ namespace AlmediaLink.Bridge
         public void TrackNotificationsShow(string notificationIdsJson) => AlmediaLink_TrackNotificationsShow(notificationIdsJson);
         public void TrackNotificationClick(string notificationId) => AlmediaLink_TrackNotificationClick(notificationId);
         public void TrackATTPreliminaryShow() => AlmediaLink_TrackATTPreliminaryShow();
+        public void NotifyPlayerQuitting() => AlmediaLink_NotifyPlayerQuitting();
     }
 }
 #endif

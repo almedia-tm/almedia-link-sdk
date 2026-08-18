@@ -92,6 +92,8 @@ namespace AlmediaLink.Bridge
         public void TrackNotificationClick(string notificationId) => _plugin.Call("trackNotificationClick", notificationId);
         public void TrackATTPreliminaryShow() { } // iOS only
 
+        public void NotifyPlayerQuitting() => _plugin.Call("notifyPlayerQuitting");
+
         public void Dispose()
         {
             _plugin?.Dispose();

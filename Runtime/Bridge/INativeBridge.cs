@@ -22,5 +22,6 @@ namespace AlmediaLink.Bridge
         void TrackNotificationsShow(string notificationIdsJson);
         void TrackNotificationClick(string notificationId);
         void TrackATTPreliminaryShow();
+        void NotifyPlayerQuitting();
     }
 }

@@ -150,6 +150,7 @@ namespace AlmediaLink.Bridge
         public void TrackNotificationsShow(string notificationIdsJson) => AlmediaLog.Debug($"Editor mock: TrackNotificationsShow {notificationIdsJson}");
         public void TrackNotificationClick(string notificationId) => AlmediaLog.Debug($"Editor mock: TrackNotificationClick id={notificationId}");
         public void TrackATTPreliminaryShow() => AlmediaLog.Debug("Editor mock: TrackATTPreliminaryShow");
+        public void NotifyPlayerQuitting() => AlmediaLog.Debug("Editor mock: NotifyPlayerQuitting");
 
         // === Emit primitives — test hooks reachable via AlmediaLinkEditorMock facade ===
         // Each builds the JSON shape the native plugin would send and dispatches via the

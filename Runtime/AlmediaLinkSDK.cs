@@ -9,7 +9,7 @@ namespace AlmediaLink
 {
     public static class AlmediaLinkSDK
     {
-        public static string Version => "1.1.3";
+        public static string Version => "1.1.4";
 
         /// <summary>
         /// The SDK's current lifecycle status. Reads <see cref="AlmediaStatus.NotInitialized"/>

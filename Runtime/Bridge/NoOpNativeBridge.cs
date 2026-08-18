@@ -48,5 +48,6 @@ namespace AlmediaLink.Bridge
         public void TrackNotificationsShow(string notificationIdsJson) { }
         public void TrackNotificationClick(string notificationId) { }
         public void TrackATTPreliminaryShow() { }
+        public void NotifyPlayerQuitting() { }
     }
 }

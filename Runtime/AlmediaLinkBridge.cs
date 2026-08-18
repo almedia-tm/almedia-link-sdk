@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.Scripting;
+using AlmediaLink.Bridge;
 using AlmediaLink.Models;
 
 namespace AlmediaLink
@@ -126,6 +127,13 @@ namespace AlmediaLink
             {
                 AlmediaLog.Error($"Handler threw in {methodName}: {e}");
             }
+        }
+
+        // Runs before native teardown reaches the job system, so this guarantees every
+        // subsequent UnitySendMessage drops instead of hitting torn-down engine state.
+        private void OnApplicationQuit()
+        {
+            NativeBridgeFactory.NotifyPlayerQuitting();
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
