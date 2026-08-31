@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-31
+
+### Added
+- In-game reward grants. `AlmediaLinkSDK.OnInGameRewardGrantRequested` fires when the backend instructs the game to grant in-game rewards, carrying an `AlmediaInGameRewardGrant`: one event per grant, bundling one or more `AlmediaInGameReward` line items (`Amount` is a `double`, `Code` is the reward code agreed with Almedia). Delivery is at-least-once, so deduplicate on `Id` when a repeat credit matters. The integration guide covers the contract and the dedup pattern.
+- `AlmediaNotification.Display` - the presentation hint, `"popup"` (banner card) or `"tray"` (quiet list entry). The set is open; treat unknown values as `"popup"`. Never null or empty.
+- `AlmediaNotification.IconUrl` - optional absolute URL of the notification's icon, `null` when the backend sent none. Exposed for host-rendered notification UI; the bundled UI does not render it in this release.
+- `AlmediaLinkEditorMock.EmitInGameRewardGrant(...)` delivers a mock grant through the real bridge path; the overload with an explicit id, called twice, reproduces an at-least-once redelivery for testing host-side dedup. `MockNotification` gained `Display` and `IconUrl`.
+- Zero-setup initialization. A `LinkButton` prefab initializes the SDK by itself when no host code has called `Initialize` by the end of the button's first frame, using the values from **Almedia → Settings**. Install, set keys, drag a prefab is now a complete integration. A host `Initialize` in that first frame runs first and the prefab stands down. A later host call with a different configuration re-initializes and takes over. The new **Auto-Initialize From Prefabs** setting gates the prefab path. Fresh installs start with it on.
+- **Note for SDK upgrades**: auto-initialization is off by default and you need to enable it explicitly if you want it (**Almedia → Settings → Auto-Initialize From Prefabs**). We recommend it (and deleting your custom initialization) unless you use `AccountId`.
+- `AlmediaLinkSDK.NotAvailableReason` reports why the service is unavailable, non-null exactly while `CurrentStatus` is `NotAvailable`.
+- `AlmediaLinkSDK.ScreenAvailability` (`CanShowRewardHub`, `CanShowOffer`) and `OnScreenAvailabilityChanged` report which screens can be presented right now. A linked player can lose the reward hub or gain an offer between syncs with no status transition; gate your own entry points on this instead of caching a flag that goes stale.
+
+### Changed
+- `AlmediaNotification.Type` is now `[Obsolete]`; use `Display`. Both carry the same value, the presentation hint `"popup"` or `"tray"`. Code comparing it against category strings such as `"reward"` or `"promo"` keeps compiling with a deprecation warning and never matches.
+- **BREAKING.** `NotificationIconMap` is removed, along with `Assets/AlmediaLink/Resources/NotificationIconMap.asset` and the icon lookup in the bundled UI. The bundled card and activity overlay are visually unchanged: they show the icon authored on the `NotificationRow` prefab. Delete the leftover asset from your project; to change the icon, make a Prefab Variant of `NotificationRow`.
+- `NotificationRowView.Populate(AlmediaNotification, Sprite)` is now `Populate(AlmediaNotification)`. The row no longer takes an icon from the caller.
+- `MockNotification`'s fourth constructor parameter is now named `display` (was `type`). Positional calls are unaffected; a named `type:` argument must be renamed.
+- The bundled `LinkButton` now hides for a linked player whose reward hub is unavailable, rather than showing a rewards button that opens nothing, and reappears if the hub returns. That case reports `promo_load` with `Hidden`. Eligible and fully-linked players are unaffected.
+- `AlmediaLinkEditorMock.EmitStatus` takes optional `reason`, `canShowRewardHub`, and `canShowOffer`. Existing one-argument calls are unchanged. Omitted availability defaults to `true` for `Linked` and `false` for every other status.
+
 ## [1.1.4] - 2026-08-18
 
 ### Fixed
@@ -16,6 +36,16 @@
 
 ### Added
 - OS support floor. On devices below iOS 16 / Android API 25 the SDK disables itself cleanly: `Initialize()` completes with status `NotAvailable`, a single warning reported through `OnLog` states the device OS version and the required one, and every further SDK call is inert - no C# code path touches the native libraries. Devices at or above the floor are unchanged, as is Editor play mode.
+
+### Changed
+- The ATT consent machinery buried in 1.1.0 is now removed: the pre-prompt screen and its prefab, the settings fields behind it, and the ATT preliminary tracking event. The public surface survives as `[Obsolete]` compatibility stubs so 1.x host code keeps compiling: the `Att*` settings getters return the former default values, `ATTPrePromptController` remains as an inert stub with its original script identity (host Prefab Variants still load), and `AlmediaLinkEditorMock.EmitShowATTPrePrompt()` is a warning no-op. Unchanged, as before: ATT-gated IDFA reading, ATT-based domain switching, and the iOS post-build hook that adds a default `NSUserTrackingUsageDescription` to `Info.plist` (host-supplied values still win).
+- Bundled fonts reduced from four Poppins weights to two: **Bold** and **Regular** (SemiBold and Medium removed; the package shrinks by ~1.1 MB). Labels that used SemiBold now render in Bold, and Medium in Regular. The link popup's body text now renders in Poppins-Regular instead of the host project's LiberationSans, removing the SDK's dependency on a font asset it does not ship.
+- The link popup's decorative background textures (`Cards`, `CardsLightBeams`) are capped at 1024px import size, trimming built-app size with no visible change.
+- The bundled UI is now pay-per-use. The prefabs moved out of `Resources/` (to `Packages/com.almedia.link/Runtime/Prefabs/`), so an integration that uses none of them ships none of the SDK's UI, art, or fonts - only the bridge glue. Compatibility shims keep 1.x integrations working:
+  - **Link popup:** each `LinkButton` prefab now carries its own reference to the `LinkPopup` prefab (visible in the button's inspector); a button with the field emptied starts linking directly on tap, with a one-time warning. `AlmediaLinkSettings.LinkPopupOverride` is deprecated but **still honored** - a variant assigned there wins over the button's reference - so upgrading hosts keep their popup. New integrations assign the button's *Link Popup* field instead.
+  - **Notification UI:** `NotificationCardOverride` / `ActivityOverlayOverride` are renamed `NotificationCardPrefab` / `ActivityOverlayPrefab`; deprecated read-only aliases remain, and serialized values migrate automatically. The slots are now *the* references the SDK instantiates, pre-filled with the bundled prefabs. Turning **Enable Default Notification UI** off clears the slots that point at the bundled prefabs so they stay out of the build - a prefab you assigned yourself survives the toggle; turning it back on restores the bundled defaults into empty slots.
+  - **Settings theming:** `ApplyHostSettings` is now a checkbox on the popup/card/overlay prefabs themselves (default on). A one-shot editor migration unticks it on host variants that were assigned in the old override slots, preserving their 1.x appearance; newly created variants receive settings theming unless the box is unticked.
+  - **BREAKING (undocumented pattern):** code that loaded the bundled prefabs itself via `Resources.Load("Prefabs/...")` now gets `null` - reference them directly from `Packages/com.almedia.link/Runtime/Prefabs/` instead.
 
 ## [1.1.1] - 2026-07-29
 

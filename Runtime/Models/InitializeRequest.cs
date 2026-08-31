@@ -15,7 +15,6 @@ namespace AlmediaLink.Models
         public string adid;
         public string afid;
         public int notificationsPollingIntervalSec;
-        public bool canRunConsentFlow;
 
         public static InitializeRequest FromResolvedConfig(ResolvedAlmediaLinkConfig config)
         {
@@ -30,8 +29,7 @@ namespace AlmediaLink.Models
                 idfv = config.Idfv ?? "",
                 adid = config.AdjustDeviceId ?? "",
                 afid = config.AppsFlyerId ?? "",
-                notificationsPollingIntervalSec = config.NotificationsPollingIntervalSec,
-                canRunConsentFlow = false
+                notificationsPollingIntervalSec = config.NotificationsPollingIntervalSec
             };
         }
     }

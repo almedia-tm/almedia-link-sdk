@@ -6,7 +6,7 @@ namespace AlmediaLink.Editor.Testing
 {
     /// <summary>
     /// Editor-only test hook for driving AlmediaLinkSDK into any state (status, error,
-    /// notifications, native log) without going through a real device or
+    /// notifications, in-game reward grants, native log) without going through a real device or
     /// backend. Lives in the AlmediaLink.Editor assembly (includePlatforms:["Editor"]) so
     /// the class does not exist in iOS/Android player builds at the assembly level
     /// host code that references it will fail to compile on a player target.
@@ -19,11 +19,18 @@ namespace AlmediaLink.Editor.Testing
     public static class AlmediaLinkEditorMock
     {
         /// <summary>
-        /// Delivers a status transition. <see cref="AlmediaLinkSDK.CurrentStatus"/> and
-        /// <see cref="AlmediaLinkSDK.OnStatusChanged"/> reflect the new value synchronously.
+        /// Delivers a status transition. <see cref="AlmediaLinkSDK.CurrentStatus"/>,
+        /// <see cref="AlmediaLinkSDK.NotAvailableReason"/>,
+        /// <see cref="AlmediaLinkSDK.ScreenAvailability"/> and their events reflect the new
+        /// values synchronously. <paramref name="reason"/> models the wire reason and is
+        /// meaningful only with <see cref="AlmediaStatus.NotAvailable"/> ("holdout" maps to
+        /// <see cref="AlmediaNotAvailableReason.Holdout"/>, anything else to Unknown). Omitted
+        /// availability flags default to (status == Linked), mirroring the happy-path native
+        /// derivation; pass explicit values to model a linked player losing a screen.
         /// </summary>
-        public static void EmitStatus(AlmediaStatus status)
-            => Mock().EmitStatus(status);
+        public static void EmitStatus(AlmediaStatus status, string reason = null,
+            bool? canShowRewardHub = null, bool? canShowOffer = null)
+            => Mock().EmitStatus(status, reason, canShowRewardHub, canShowOffer);
 
         /// <summary>
         /// Fires <see cref="AlmediaLinkSDK.OnErrorOccurred"/> with the given code and message.
@@ -54,6 +61,34 @@ namespace AlmediaLink.Editor.Testing
         }
 
         /// <summary>
+        /// Fires <see cref="AlmediaLinkSDK.OnInGameRewardGrantRequested"/> with a generated grant id and
+        /// the current UTC timestamp. Pass at least one reward; the SDK drops a rewardless
+        /// grant as malformed, which this can also exercise.
+        /// </summary>
+        public static void EmitInGameRewardGrant(params MockInGameReward[] rewards)
+            => EmitInGameRewardGrant(null, rewards);
+
+        /// <summary>
+        /// Fires <see cref="AlmediaLinkSDK.OnInGameRewardGrantRequested"/> with an explicit grant id.
+        /// Delivery on device is at-least-once, so call this twice with the same id to
+        /// reproduce a redelivered grant and exercise host-side deduplication.
+        /// A null or empty <paramref name="id"/> generates one.
+        /// </summary>
+        public static void EmitInGameRewardGrant(string id, params MockInGameReward[] rewards)
+        {
+            var bridge = Mock();
+            var converted = rewards == null
+                ? Array.Empty<InGameRewardItem>()
+                : Array.ConvertAll(rewards, ToRewardItem);
+            bridge.EmitInGameRewardGrant(new InGameRewardGrantResponse
+            {
+                id = string.IsNullOrEmpty(id) ? Guid.NewGuid().ToString("N") : id,
+                timestamp = DateTime.UtcNow.ToString("o"),
+                rewards = converted
+            });
+        }
+
+        /// <summary>
         /// Fires <see cref="AlmediaLinkSDK.OnScreenPresented"/> for the given screen, as if the
         /// native container had committed to presenting it. Pair it with a later
         /// <see cref="EmitScreenDismissed"/> to reproduce native's matched-pair contract.
@@ -72,14 +107,16 @@ namespace AlmediaLink.Editor.Testing
             => Mock().EmitScreenDismissed(screen, result, errorCode, errorMessage);
 
         /// <summary>
-        /// Legacy hook for a pre-prompt screen the SDK no longer shows. Raises the bridge's
-        /// ShowATTPrePrompt event, which has no subscribers, so no UI appears; like every Emit*
-        /// it still flips the mock into manual mode. Kept so existing QA scripts compile;
-        /// scheduled for removal in a future release.
+        /// Compatibility shim: the SDK no longer shows an ATT pre-prompt. Still flips the mock into
+        /// manual mode (and still throws before <see cref="AlmediaLinkSDK.Initialize"/>) exactly like
+        /// every other emit, but delivers nothing.
         /// </summary>
-        [Obsolete("The SDK no longer shows an ATT pre-prompt; this raises an event with no subscribers and has no effect. Scheduled for removal in a future release.")]
+        [Obsolete("The SDK no longer shows an ATT pre-prompt; this emit has no effect.")]
         public static void EmitShowATTPrePrompt()
-            => Mock().EmitShowATTPrePrompt();
+        {
+            Mock();
+            AlmediaLog.Warning("EmitShowATTPrePrompt is a no-op: the ATT pre-prompt was removed in 1.2.0.");
+        }
 
         /// <summary>
         /// Delivers a forwarded log line through the same path the iOS/Android native plugins use.
@@ -114,7 +151,14 @@ namespace AlmediaLink.Editor.Testing
             title = n.Title ?? "",
             message = n.Message ?? "",
             timestamp = n.Timestamp ?? "",
-            type = n.Type ?? ""
+            type = n.Display ?? "",
+            iconUrl = n.IconUrl ?? ""
+        };
+
+        private static InGameRewardItem ToRewardItem(MockInGameReward r) => new InGameRewardItem
+        {
+            amount = r.Amount,
+            code = r.Code ?? ""
         };
     }
 
@@ -127,21 +171,45 @@ namespace AlmediaLink.Editor.Testing
         public readonly string Id;
         public readonly string Title;
         public readonly string Message;
-        public readonly string Type;
+        public readonly string Display;
         public readonly string Timestamp;
+        public readonly string IconUrl;
+
+        /// <summary>Alias of <see cref="Display"/>.</summary>
+        [Obsolete("Since 1.2.0 the wire field carries the presentation hint (\"popup\"/\"tray\"). Use Display.")]
+        public string Type => Display;
 
         /// <summary>
         /// Constructs a notification for <see cref="AlmediaLinkEditorMock.EmitNotifications"/>.
-        /// A null <paramref name="timestamp"/> defaults to the current UTC time in ISO-8601 (round-trip "o" format),
-        /// matching the format the backend emits.
+        /// <paramref name="display"/> models the wire presentation hint ("popup" or "tray";
+        /// native never forwards anything else). A null <paramref name="timestamp"/> defaults
+        /// to the current UTC time in ISO-8601 (round-trip "o" format), matching the format
+        /// the backend emits. A null <paramref name="iconUrl"/> models the omitted wire key.
         /// </summary>
-        public MockNotification(string id, string title, string message, string type, string timestamp = null)
+        public MockNotification(string id, string title, string message, string display,
+            string timestamp = null, string iconUrl = null)
         {
             Id = id;
             Title = title;
             Message = message;
-            Type = type;
+            Display = display;
             Timestamp = timestamp ?? DateTime.UtcNow.ToString("o");
+            IconUrl = iconUrl;
+        }
+    }
+
+    /// <summary>
+    /// One reward line item for <see cref="AlmediaLinkEditorMock.EmitInGameRewardGrant(MockInGameReward[])"/>.
+    /// </summary>
+    public readonly struct MockInGameReward
+    {
+        public readonly double Amount;
+        public readonly string Code;
+
+        public MockInGameReward(double amount, string code)
+        {
+            Amount = amount;
+            Code = code;
         }
     }
 }

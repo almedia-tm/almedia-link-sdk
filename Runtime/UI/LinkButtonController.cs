@@ -52,20 +52,28 @@ namespace AlmediaLink.UI
         [Tooltip("Shown once the player has linked.")]
         [SerializeField] private VisualState _linked = new VisualState();
 
+        [Header("Link popup")]
+        [Tooltip("The popup an eligible player's tap opens. Assign a Prefab Variant to customize it; leave empty to start linking directly on tap.")]
+        [SerializeField] private LinkPopupController _linkPopup;
+
         private PromoState? _lastPromoState;
         private bool _missingLinkedVisualWarned;
+        private bool _missingPopupWarned;
 
         private void Awake()
         {
+            AlmediaLinkSDK.InitializeIfNeeded();
+
             _eligible.Subscribe(OnButtonClicked);
             _linked.Subscribe(OnButtonClicked);
             if (_eligible.Button == null && _linked.Button == null)
                 AlmediaLog.Error("LinkButton: no state button assigned on the prefab. Button will be inert.");
 
             AlmediaLinkSDK.OnStatusChanged += HandleStatusChanged;
+            AlmediaLinkSDK.OnScreenAvailabilityChanged += HandleAvailabilityChanged;
             gameObject.SetActive(false);
             if (AlmediaLinkSDK.CurrentStatus != AlmediaStatus.NotInitialized)
-                HandleStatusChanged(AlmediaLinkSDK.CurrentStatus);
+                Refresh();
         }
 
         private void OnDestroy()
@@ -73,11 +81,16 @@ namespace AlmediaLink.UI
             _eligible.Unsubscribe(OnButtonClicked);
             _linked.Unsubscribe(OnButtonClicked);
             AlmediaLinkSDK.OnStatusChanged -= HandleStatusChanged;
+            AlmediaLinkSDK.OnScreenAvailabilityChanged -= HandleAvailabilityChanged;
         }
 
-        private void HandleStatusChanged(AlmediaStatus status)
+        private void HandleStatusChanged(AlmediaStatus status) => Refresh();
+
+        private void HandleAvailabilityChanged(AlmediaScreenAvailability availability) => Refresh();
+
+        private void Refresh()
         {
-            PromoState promo = ToPromoState(status);
+            PromoState promo = ShownStateFor(AlmediaLinkSDK.CurrentStatus, AlmediaLinkSDK.ScreenAvailability);
 
             // Applied before activating so a transition never shows the wrong state for a frame.
             if (promo != PromoState.Hidden)
@@ -87,12 +100,13 @@ namespace AlmediaLink.UI
             FirePromoLoad(promo);
         }
 
-        private static PromoState ToPromoState(AlmediaStatus status)
+        private static PromoState ShownStateFor(AlmediaStatus status, AlmediaScreenAvailability availability)
         {
             switch (status)
             {
                 case AlmediaStatus.Eligible: return PromoState.Eligible;
-                case AlmediaStatus.Linked: return PromoState.Linked;
+                case AlmediaStatus.Linked:
+                    return availability.CanShowRewardHub ? PromoState.Linked : PromoState.Hidden;
                 default: return PromoState.Hidden;
             }
         }
@@ -130,15 +144,38 @@ namespace AlmediaLink.UI
         {
             // Reported as the state the player actually saw and tapped - the same value promo_load
             // sent for this button - so click and load stay comparable.
-            AlmediaLinkSDK.TrackPromoClick(_lastPromoState ?? ToPromoState(AlmediaLinkSDK.CurrentStatus));
+            AlmediaLinkSDK.TrackPromoClick(_lastPromoState
+                ?? ShownStateFor(AlmediaLinkSDK.CurrentStatus, AlmediaLinkSDK.ScreenAvailability));
 
             // Routed on the live status rather than the visible subtree: if the two ever disagree, the
             // action the SDK can actually honor is the right one. Deliberately not Engage() - Engage
             // links directly, while the bundled button keeps the popup on the eligible path.
+            // The legacy 1.x settings override must keep winning over the button's own reference.
+            var settings = AlmediaLinkSettings.Load();
+            var popup = settings != null && settings.LegacyLinkPopupOverride != null
+                ? settings.LegacyLinkPopupOverride
+                : _linkPopup;
+
             if (AlmediaLinkSDK.CurrentStatus == AlmediaStatus.Linked)
+            {
                 AlmediaLinkSDK.ShowRewardHub();
+            }
+            else if (popup != null)
+            {
+                AlmediaLinkUIManager.ShowLinkPopup(popup);
+            }
             else
-                AlmediaLinkUIManager.ShowLinkPopup();
+            {
+                // No popup assigned: keep the button functional by linking directly
+                if (!_missingPopupWarned)
+                {
+                    _missingPopupWarned = true;
+                    AlmediaLog.Warning(
+                        "LinkButton: no Link Popup assigned; the tap starts linking directly. " +
+                        "Assign the popup on the LinkButton prefab to restore the intro popup.");
+                }
+                AlmediaLinkSDK.StartLinking(PlacementType.Popup);
+            }
         }
 
         private void SetVisible(bool visible)

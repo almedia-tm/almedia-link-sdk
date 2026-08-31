@@ -27,7 +27,13 @@ namespace AlmediaLink.Bridge
         private IEnumerator EmitNotAvailable()
         {
             yield return null;
-            var json = JsonUtility.ToJson(new StatusChangedResponse { status = "notAvailable" });
+            // Explicitly false: the DTO's fail-open defaults must not claim screens here.
+            var json = JsonUtility.ToJson(new StatusChangedResponse
+            {
+                status = "notAvailable",
+                canShowRewardHub = false,
+                canShowOffer = false
+            });
             _host.gameObject.SendMessage("OnStatusChanged", json);
         }
 
@@ -47,7 +53,7 @@ namespace AlmediaLink.Bridge
         public void TrackPopupCtaClick() { }
         public void TrackNotificationsShow(string notificationIdsJson) { }
         public void TrackNotificationClick(string notificationId) { }
-        public void TrackATTPreliminaryShow() { }
         public void NotifyPlayerQuitting() { }
+        public void TrackATTPreliminaryShow() { }
     }
 }

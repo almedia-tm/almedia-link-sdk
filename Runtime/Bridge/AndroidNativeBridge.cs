@@ -80,9 +80,6 @@ namespace AlmediaLink.Bridge
         public void StartNotificationPolling() => _plugin.Call("startNotificationPolling");
         public void StopNotificationPolling() => _plugin.Call("stopNotificationPolling");
 
-        public void ContinueWithATT() { } // iOS only
-        public void SkipATT() { } // iOS only
-
         public void TrackPromoLoad(PromoState state) => _plugin.Call("trackPromoLoad", state.ToNativeString());
         public void TrackPromoClick(PromoState state) => _plugin.Call("trackPromoClick", state.ToNativeString());
         public void TrackPopupShow() => _plugin.Call("trackPopupShow");
@@ -90,7 +87,6 @@ namespace AlmediaLink.Bridge
         public void TrackPopupCtaClick() => _plugin.Call("trackPopupCtaClick");
         public void TrackNotificationsShow(string notificationIdsJson) => _plugin.Call("trackNotificationsShow", notificationIdsJson);
         public void TrackNotificationClick(string notificationId) => _plugin.Call("trackNotificationClick", notificationId);
-        public void TrackATTPreliminaryShow() { } // iOS only
 
         public void NotifyPlayerQuitting() => _plugin.Call("notifyPlayerQuitting");
 

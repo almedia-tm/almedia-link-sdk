@@ -16,6 +16,7 @@ MonoBehaviour:
   _androidIntegrationKey: 
   _notificationPollIntervalSeconds: 30
   _enableDefaultNotificationUI: 1
+  _autoInitializeFromPrefab: 1
   _popupTitle: Get Rewarded While Playing
   _benefit1Title: Earn real money & gift cards
   _benefit1Description: Convert your Word Farm gameplay into rewards.
@@ -27,14 +28,6 @@ MonoBehaviour:
   _ctaButtonColor: {r: 0.003921569, g: 0.8392157, b: 0.4627451, a: 1}
   _ctaButtonTextColor: {r: 0, g: 0, b: 0, a: 1}
   _notificationBackgroundColor: {r: 0.07058824, g: 0.07058824, b: 0.07058824, a: 1}
-  _attPromptTitle: Don't miss your rewards by enabling app tracking
-  _attRewardAmount: $9.38
-  _attWhyTitle: Why do we need this?
-  _attWhyBody: Tracking lets us make sure your rewards can be credited correctly
-    and faster.
-  _attControlTitle: You're in control
-  _attControlBody: Change permissions at any time in Settings.
-  _attContinueButtonText: Continue
-  _attBackgroundColor: {r: 0.078431375, g: 0.08235294, b: 0.13725491, a: 1}
-  _attPrimaryButtonColor: {r: 0.003921569, g: 0.8392157, b: 0.4627451, a: 1}
-  _attButtonTextColor: {r: 1, g: 1, b: 1, a: 1}
+  _notificationCardPrefab: {fileID: 7900280168532762302, guid: afcaaf1a98025d44db6df97151b567d1, type: 3}
+  _activityOverlayPrefab: {fileID: 2784621432374350182, guid: d617bfc66976869488c4b38c88d611df, type: 3}
+  _migrationVersion: 1

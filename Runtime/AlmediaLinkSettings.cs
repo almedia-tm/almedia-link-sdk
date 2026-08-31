@@ -1,5 +1,6 @@
 using AlmediaLink.UI;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace AlmediaLink
 {
@@ -22,6 +23,9 @@ namespace AlmediaLink
 
         [Tooltip("When enabled, the SDK renders the built-in NotificationCard and ActivityOverlay. Disable to use your own UI.")]
         [SerializeField] private bool _enableDefaultNotificationUI = true;
+
+        [Tooltip("When enabled, a LinkButton prefab initializes the SDK by itself (using the keys above) unless the host has already called Initialize. Disable when initialization timing must stay under host control, e.g. consent-gated flows.")]
+        [SerializeField] private bool _autoInitializeFromPrefab = false;
 
         [Header("UI Text")]
         [Tooltip("LinkPopup headline.")]
@@ -60,42 +64,23 @@ namespace AlmediaLink
         [Tooltip("Notification card background color.")]
         [SerializeField] private Color _notificationBackgroundColor = new Color32(0x12, 0x12, 0x12, 0xFF);
 
-        // Settings for an iOS pre-prompt screen the SDK no longer shows. Kept for
-        // serialized-data compatibility; scheduled for removal in a future release.
-        [HideInInspector]
-        [SerializeField] private string _attPromptTitle = "Don't miss your rewards by enabling app tracking";
-        [HideInInspector]
-        [SerializeField] private string _attRewardAmount = "$9.38";
-        [HideInInspector]
-        [SerializeField] private string _attWhyTitle = "Why do we need this?";
-        [HideInInspector]
-        [SerializeField] private string _attWhyBody = "Tracking lets us make sure your rewards can be credited correctly and faster.";
-        [HideInInspector]
-        [SerializeField] private string _attControlTitle = "You're in control";
-        [HideInInspector]
-        [SerializeField] private string _attControlBody = "Change permissions at any time in Settings.";
-        [HideInInspector]
-        [SerializeField] private string _attContinueButtonText = "Continue";
-        [HideInInspector]
-        [SerializeField] private Color _attBackgroundColor = new Color32(0x12, 0x12, 0x12, 0xFF);
-        [HideInInspector]
-        [SerializeField] private Color _attPrimaryButtonColor = new Color32(0x00, 0xC8, 0x53, 0xFF);
-        [HideInInspector]
-        [SerializeField] private Color _attButtonTextColor = Color.white;
+        [Header("Default UI Prefabs (the notification UI the SDK spawns when enabled)")]
+        [Tooltip("The notification card the SDK instantiates when notifications arrive. Assign a Prefab Variant to customize it. Cleared automatically while the default notification UI is disabled so the prefab stays out of your build.")]
+        [FormerlySerializedAs("_notificationCardOverride")]
+        [SerializeField] private NotificationCardController _notificationCardPrefab;
 
-        [Header("Prefab Overrides (optional - assign Prefab Variants to customize UI)")]
-        [Tooltip("Optional Prefab Variant of LinkPopup to use instead of the SDK default. Leave empty to use the built-in prefab.")]
+        [Tooltip("The notification list overlay opened from a stacked card. Assign a Prefab Variant to customize it. Cleared automatically while the default notification UI is disabled.")]
+        [FormerlySerializedAs("_activityOverlayOverride")]
+        [SerializeField] private ActivityOverlayController _activityOverlayPrefab;
+
+        // 1.x compatibility: intentionally undrawn but still serialized and honored (wins over the
+        // button's own popup reference). Not dead code.
         [SerializeField] private LinkPopupController _linkPopupOverride;
 
-        [Tooltip("Optional Prefab Variant of NotificationCard to use instead of the SDK default. Leave empty to use the built-in prefab.")]
-        [SerializeField] private NotificationCardController _notificationCardOverride;
+        // Bumped by AlmediaLinkMigrations after each one-shot upgrade pass over host assets.
+        [SerializeField, HideInInspector] internal int _migrationVersion;
 
-        [Tooltip("Optional Prefab Variant of ActivityOverlay to use instead of the SDK default. Leave empty to use the built-in prefab.")]
-        [SerializeField] private ActivityOverlayController _activityOverlayOverride;
-
-        // Override for a pre-prompt screen the SDK no longer shows; scheduled for removal.
-        [HideInInspector]
-        [SerializeField] private ATTPrePromptController _attPrePromptOverride;
+        internal bool AutoInitializeFromPrefab => _autoInitializeFromPrefab;
 
         public string IosIntegrationKey => _iosIntegrationKey;
         public string AndroidIntegrationKey => _androidIntegrationKey;
@@ -115,21 +100,52 @@ namespace AlmediaLink
 
         public Color NotificationBackgroundColor => _notificationBackgroundColor;
 
-        public string AttPromptTitle => _attPromptTitle;
-        public string AttRewardAmount => _attRewardAmount;
-        public string AttWhyTitle => _attWhyTitle;
-        public string AttWhyBody => _attWhyBody;
-        public string AttControlTitle => _attControlTitle;
-        public string AttControlBody => _attControlBody;
-        public string AttContinueButtonText => _attContinueButtonText;
-        public Color AttBackgroundColor => _attBackgroundColor;
-        public Color AttPrimaryButtonColor => _attPrimaryButtonColor;
-        public Color AttButtonTextColor => _attButtonTextColor;
+        public NotificationCardController NotificationCardPrefab => _notificationCardPrefab;
+        public ActivityOverlayController ActivityOverlayPrefab => _activityOverlayPrefab;
 
+        internal LinkPopupController LegacyLinkPopupOverride => _linkPopupOverride;
+
+        #region Obsolete 1.x surface - compatibility shims
+
+        [System.Obsolete("The popup is configured on the LinkButton prefab since 1.2.0. A value assigned here is still honored (it wins over the button's reference) but new integrations should assign the button's Link Popup field")]
         public LinkPopupController LinkPopupOverride => _linkPopupOverride;
-        public NotificationCardController NotificationCardOverride => _notificationCardOverride;
-        public ActivityOverlayController ActivityOverlayOverride => _activityOverlayOverride;
-        public ATTPrePromptController AttPrePromptOverride => _attPrePromptOverride;
+
+        [System.Obsolete("Renamed to NotificationCardPrefab.")]
+        public NotificationCardController NotificationCardOverride => _notificationCardPrefab;
+
+        [System.Obsolete("Renamed to ActivityOverlayPrefab.")]
+        public ActivityOverlayController ActivityOverlayOverride => _activityOverlayPrefab;
+
+        // The ATT consent pre-prompt was removed in 1.2.0. These return the former default values
+        // so host code compiled against 1.x keeps building; the values drive no UI.
+
+        [System.Obsolete("The ATT consent pre-prompt was removed in 1.2.0; this constant drives no UI.")]
+        public string AttPromptTitle => "Don't miss your rewards by enabling app tracking";
+        [System.Obsolete("The ATT consent pre-prompt was removed in 1.2.0; this constant drives no UI.")]
+        public string AttRewardAmount => "$9.38";
+        [System.Obsolete("The ATT consent pre-prompt was removed in 1.2.0; this constant drives no UI.")]
+        public string AttWhyTitle => "Why do we need this?";
+        [System.Obsolete("The ATT consent pre-prompt was removed in 1.2.0; this constant drives no UI.")]
+        public string AttWhyBody => "Tracking lets us make sure your rewards can be credited correctly and faster.";
+        [System.Obsolete("The ATT consent pre-prompt was removed in 1.2.0; this constant drives no UI.")]
+        public string AttControlTitle => "You're in control";
+        [System.Obsolete("The ATT consent pre-prompt was removed in 1.2.0; this constant drives no UI.")]
+        public string AttControlBody => "Change permissions at any time in Settings.";
+        [System.Obsolete("The ATT consent pre-prompt was removed in 1.2.0; this constant drives no UI.")]
+        public string AttContinueButtonText => "Continue";
+        [System.Obsolete("The ATT consent pre-prompt was removed in 1.2.0; this constant drives no UI.")]
+        public Color AttBackgroundColor => new Color32(0x12, 0x12, 0x12, 0xFF);
+        [System.Obsolete("The ATT consent pre-prompt was removed in 1.2.0; this constant drives no UI.")]
+        public Color AttPrimaryButtonColor => new Color32(0x00, 0xC8, 0x53, 0xFF);
+        [System.Obsolete("The ATT consent pre-prompt was removed in 1.2.0; this constant drives no UI.")]
+        public Color AttButtonTextColor => Color.white;
+
+#pragma warning disable CS0618 // returning the obsolete stub type from an obsolete member
+        [System.Obsolete("The ATT consent pre-prompt was removed in 1.2.0; always null.")]
+        public ATTPrePromptController AttPrePromptOverride => null;
+#pragma warning restore CS0618
+
+        #endregion
 
         private static AlmediaLinkSettings _cachedInstance;
 
@@ -167,12 +183,45 @@ namespace AlmediaLink
         }
 
 #if UNITY_EDITOR
+        private const string PkgCardPath = "Packages/com.almedia.link/Runtime/Prefabs/NotificationCard.prefab";
+        private const string PkgOverlayPath = "Packages/com.almedia.link/Runtime/Prefabs/ActivityOverlay.prefab";
+
         private void OnValidate()
         {
             if (_notificationPollIntervalSeconds < 5)
                 _notificationPollIntervalSeconds = DefaultPollInterval;
 
+            SyncNotificationPrefabsWithToggle();
             InvalidateCache();
+        }
+
+        // This asset ships via Resources, so a serialized prefab reference here force-includes that
+        // prefab in every build regardless of the toggle - the references must track the toggle.
+        private void SyncNotificationPrefabsWithToggle()
+        {
+            if (!_enableDefaultNotificationUI)
+            {
+                // Host-assigned prefabs survive the toggle. Bundled refs are cleared; so are refs
+                // that read null (type mismatch) - their raw serialized reference still
+                // force-includes the prefab in a build.
+                if (_notificationCardPrefab == null || IsBundled(_notificationCardPrefab))
+                    _notificationCardPrefab = null;
+                if (_activityOverlayPrefab == null || IsBundled(_activityOverlayPrefab))
+                    _activityOverlayPrefab = null;
+                return;
+            }
+
+            // Re-enabling restores the bundled defaults; a host-assigned variant is left alone.
+            if (_notificationCardPrefab == null)
+                _notificationCardPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<NotificationCardController>(PkgCardPath);
+            if (_activityOverlayPrefab == null)
+                _activityOverlayPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<ActivityOverlayController>(PkgOverlayPath);
+        }
+
+        private static bool IsBundled(Object asset)
+        {
+            if (asset == null) return false;
+            return UnityEditor.AssetDatabase.GetAssetPath(asset).StartsWith("Packages/com.almedia.link");
         }
 #endif
     }

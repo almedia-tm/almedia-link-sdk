@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using AlmediaLink.Bridge;
@@ -9,7 +10,7 @@ namespace AlmediaLink
 {
     public static class AlmediaLinkSDK
     {
-        public static string Version => "1.1.4";
+        public static string Version => "1.2.0";
 
         /// <summary>
         /// The SDK's current lifecycle status. Reads <see cref="AlmediaStatus.NotInitialized"/>
@@ -20,9 +21,47 @@ namespace AlmediaLink
         /// </summary>
         public static AlmediaStatus CurrentStatus => _almediaStatus;
 
+        /// <summary>
+        /// Why <see cref="CurrentStatus"/> is <see cref="AlmediaStatus.NotAvailable"/>. Non-null
+        /// exactly while the status is NotAvailable and null in every other status. A missing or
+        /// unrecognized wire reason reads as <see cref="AlmediaNotAvailableReason.Unknown"/>.
+        /// Current before <see cref="OnStatusChanged"/> fires, so handlers can read it directly.
+        /// </summary>
+        public static AlmediaNotAvailableReason? NotAvailableReason => _notAvailableReason;
+
+        /// <summary>
+        /// Which SDK screens native can present right now. A fresh snapshot arrives with every
+        /// status update - including updates where the status itself did not change, e.g. a
+        /// linked player losing the reward hub between syncs. Reads all-false until the SDK
+        /// is ready.
+        /// </summary>
+        public static AlmediaScreenAvailability ScreenAvailability => _screenAvailability;
+
         public static event Action<AlmediaStatus> OnStatusChanged;
+
+        /// <summary>
+        /// Fires when <see cref="ScreenAvailability"/> changed. When one native update changes
+        /// both status and availability, <see cref="OnStatusChanged"/> fires first; every
+        /// snapshot (<see cref="CurrentStatus"/>, <see cref="NotAvailableReason"/>,
+        /// <see cref="ScreenAvailability"/>) is current before either event fires.
+        /// </summary>
+        public static event Action<AlmediaScreenAvailability> OnScreenAvailabilityChanged;
         public static event Action<string> OnLinkCompleted;
         public static event Action<List<AlmediaNotification>> OnNotificationsReceived;
+
+        /// <summary>
+        /// Fires when the backend instructs the game to grant in-game rewards. Credit
+        /// the player and celebrate here. One event per grant: a grant is an atomic
+        /// bundle of one or more rewards granted together (<see cref="AlmediaInGameRewardGrant.Rewards"/>),
+        /// and three grants arriving at once raise three events.
+        /// </summary>
+        /// <remarks>
+        /// Delivery is at-least-once. The server-to-server
+        /// reward postback remains the authoritative record. Each grant has a unique
+        /// <see cref="AlmediaInGameRewardGrant.Id"/> that a redelivery repeats, so deduplicate
+        /// on it when a repeat credit matters to your economy.
+        /// </remarks>
+        public static event Action<AlmediaInGameRewardGrant> OnInGameRewardGrantRequested;
         public static event Action<AlmediaError> OnErrorOccurred;
 
         /// <summary>
@@ -54,7 +93,10 @@ namespace AlmediaLink
 
         private static INativeBridge _bridge;
         private static AlmediaStatus _almediaStatus = AlmediaStatus.NotInitialized;
+        private static AlmediaNotAvailableReason? _notAvailableReason;
+        private static AlmediaScreenAvailability _screenAvailability;
         private static ResolvedAlmediaLinkConfig _activeConfig;
+        private static bool _pendingAutoInit;
 
         /// <summary>
         /// Boots the SDK with the given configuration and starts the status lifecycle.
@@ -96,6 +138,8 @@ namespace AlmediaLink
             }
 
             _almediaStatus = AlmediaStatus.NotInitialized;
+            _notAvailableReason = null;
+            _screenAvailability = default;
 
             try
             {
@@ -131,6 +175,44 @@ namespace AlmediaLink
             AlmediaLinkUIManager.Initialize();
 
             AlmediaLog.Info("SDK initialized. Waiting for native callback.");
+        }
+
+        // The LinkButton prefab's weak init: a no-op once the host has initialized,
+        // and inert unless the settings asset explicitly opts in.
+        internal static void InitializeIfNeeded()
+        {
+            if (_activeConfig != null || _pendingAutoInit) return;
+
+            var settings = AlmediaLinkSettings.Load();
+            if (settings == null || !settings.AutoInitializeFromPrefab) return;
+
+            try
+            {
+                NativeBridgeFactory.Create();
+            }
+            catch (PlatformNotSupportedException)
+            {
+                AlmediaLog.Warning($"AlmediaLink is not supported on {Application.platform}; the Link button stays hidden.");
+                return;
+            }
+            catch (Exception e)
+            {
+                AlmediaLog.Error($"Unexpected failure creating native bridge: {e.GetType().Name}: {e.Message}");
+                return;
+            }
+
+            _pendingAutoInit = true;
+            NativeBridgeFactory.Bridge.StartCoroutine(DeferredAutoInit());
+        }
+
+        private static IEnumerator DeferredAutoInit()
+        {
+            yield return null;
+            _pendingAutoInit = false;
+            if (_activeConfig != null) yield break;
+
+            AlmediaLog.Info("Initializing from a LinkButton prefab (no host Initialize call).");
+            Initialize(new AlmediaLinkConfig());
         }
 
         /// <summary>Opens the account-linking flow.</summary>
@@ -211,18 +293,6 @@ namespace AlmediaLink
             _bridge.StopNotificationPolling();
         }
 
-        internal static void ContinueWithATT()
-        {
-            if (!GuardInitialized()) return;
-            _bridge.ContinueWithATT();
-        }
-
-        internal static void SkipATT()
-        {
-            if (!GuardInitialized()) return;
-            _bridge.SkipATT();
-        }
-
         internal static void TrackPromoLoad(PromoState state)
         {
             if (!GuardInitialized()) return;
@@ -265,18 +335,14 @@ namespace AlmediaLink
             _bridge.TrackNotificationClick(notificationId);
         }
 
-        internal static void TrackATTPreliminaryShow()
-        {
-            if (!GuardInitialized()) return;
-            _bridge.TrackATTPreliminaryShow();
-        }
-
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetOnDomainReload()
         {
             OnStatusChanged = null;
+            OnScreenAvailabilityChanged = null;
             OnLinkCompleted = null;
             OnNotificationsReceived = null;
+            OnInGameRewardGrantRequested = null;
             OnErrorOccurred = null;
             OnScreenPresented = null;
             OnScreenDismissed = null;
@@ -284,15 +350,62 @@ namespace AlmediaLink
             AlmediaLinkUIManager.Cleanup();
             _bridge = null;
             _almediaStatus = AlmediaStatus.NotInitialized;
+            _notAvailableReason = null;
+            _screenAvailability = default;
             _activeConfig = null;
+            _pendingAutoInit = false;
         }
 
         private static void HandleStatusChanged(StatusChangedResponse response)
         {
-            if (!StatusExtensions.TryFromString(response.status, out _almediaStatus))
+            if (!StatusExtensions.TryFromString(response.status, out var status))
                 AlmediaLog.Warning($"Unrecognized status '{response.status}' from native; treating as NotInitialized.");
-            AlmediaLog.Info($"Status changed: {_almediaStatus}");
-            OnStatusChanged?.Invoke(_almediaStatus);
+
+            var reason = status == AlmediaStatus.NotAvailable
+                ? AlmediaNotAvailableReasonExtensions.FromWireString(response.reason)
+                : (AlmediaNotAvailableReason?)null;
+            var availability = status == AlmediaStatus.NotInitialized
+                ? default
+                : new AlmediaScreenAvailability(response.canShowRewardHub, response.canShowOffer);
+
+            bool statusOrReasonChanged = status != _almediaStatus || reason != _notAvailableReason;
+            bool availabilityChanged = availability != _screenAvailability;
+
+            // Every snapshot is current before any event fires - a handler for either event
+            // may read all three.
+            _almediaStatus = status;
+            _notAvailableReason = reason;
+            _screenAvailability = availability;
+
+            if (statusOrReasonChanged)
+            {
+                AlmediaLog.Info(reason == null
+                    ? $"Status changed: {_almediaStatus}"
+                    : $"Status changed: {_almediaStatus} (reason: {reason})");
+                
+                try
+                {
+                    OnStatusChanged?.Invoke(_almediaStatus);
+                }
+                catch (Exception e)
+                {
+                    AlmediaLog.Error($"OnStatusChanged handler threw: {e}");
+                }
+            }
+
+            if (availabilityChanged)
+            {
+                AlmediaLog.Info($"Screen availability changed: {availability}");
+
+                try
+                {
+                    OnScreenAvailabilityChanged?.Invoke(availability);
+                }
+                catch (Exception e)
+                {
+                    AlmediaLog.Error($"OnScreenAvailabilityChanged handler threw: {e}");
+                }
+            }
         }
 
         private static void HandleLinkCompleted(LinkCompletedResponse response)
@@ -314,6 +427,22 @@ namespace AlmediaLink
             }
             
             OnNotificationsReceived?.Invoke(list);
+        }
+
+        private static void HandleInGameRewardGrantRequested(InGameRewardGrantResponse response)
+        {
+            if (string.IsNullOrEmpty(response.id))
+            {
+                AlmediaLog.Warning("Dropping in-game reward grant with no id.");
+                return;
+            }
+            if (response.rewards == null || response.rewards.Length == 0)
+            {
+                AlmediaLog.Warning($"Dropping in-game reward grant '{response.id}' with no rewards.");
+                return;
+            }
+            AlmediaLog.Info($"In-game reward grant received: {response.id} ({response.rewards.Length} reward(s))");
+            OnInGameRewardGrantRequested?.Invoke(AlmediaInGameRewardGrant.FromResponse(response));
         }
 
         private static void HandleErrorOccurred(ErrorCallbackResponse response)
@@ -365,6 +494,7 @@ namespace AlmediaLink
             AlmediaLinkBridge.StatusChanged += HandleStatusChanged;
             AlmediaLinkBridge.LinkCompleted += HandleLinkCompleted;
             AlmediaLinkBridge.NotificationsReceived += HandleNotificationsReceived;
+            AlmediaLinkBridge.InGameRewardGrantRequested += HandleInGameRewardGrantRequested;
             AlmediaLinkBridge.ErrorOccurred += HandleErrorOccurred;
             AlmediaLinkBridge.ScreenPresented += HandleScreenPresented;
             AlmediaLinkBridge.ScreenDismissed += HandleScreenDismissed;
@@ -375,6 +505,7 @@ namespace AlmediaLink
             AlmediaLinkBridge.StatusChanged -= HandleStatusChanged;
             AlmediaLinkBridge.LinkCompleted -= HandleLinkCompleted;
             AlmediaLinkBridge.NotificationsReceived -= HandleNotificationsReceived;
+            AlmediaLinkBridge.InGameRewardGrantRequested -= HandleInGameRewardGrantRequested;
             AlmediaLinkBridge.ErrorOccurred -= HandleErrorOccurred;
             AlmediaLinkBridge.ScreenPresented -= HandleScreenPresented;
             AlmediaLinkBridge.ScreenDismissed -= HandleScreenDismissed;

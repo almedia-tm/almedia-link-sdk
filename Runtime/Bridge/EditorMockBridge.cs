@@ -12,7 +12,6 @@ namespace AlmediaLink.Bridge
         private const float StatusTransitionDelay = 0.1f;
         private const float LinkFlowDelay = 0.5f;
         private const float PollDelay = 0.2f;
-        private const float ATTDelay = 0.3f;
         private const float ScreenCloseDelay = 0.3f;
 
         private readonly MonoBehaviour _host;
@@ -50,7 +49,6 @@ namespace AlmediaLink.Bridge
             AlmediaLog.Debug("Editor mock: Initialize");
             if (_manualMode) { AlmediaLog.Debug("Editor mock: manual mode — Initialize is a no-op"); return; }
 
-            // The SDK no longer shows the pre-prompt, so it is never auto-shown in the editor.
             Schedule(SimulateInitialize());
         }
 
@@ -128,20 +126,6 @@ namespace AlmediaLink.Bridge
             AlmediaLog.Debug("Editor mock: StopNotificationPolling");
         }
 
-        public void ContinueWithATT()
-        {
-            AlmediaLog.Debug("Editor mock: ContinueWithATT");
-            if (_manualMode) { AlmediaLog.Debug("Editor mock: manual mode — ContinueWithATT is a no-op"); return; }
-            Schedule(SimulateInitialize());
-        }
-
-        public void SkipATT()
-        {
-            AlmediaLog.Debug("Editor mock: SkipATT");
-            if (_manualMode) { AlmediaLog.Debug("Editor mock: manual mode — SkipATT is a no-op"); return; }
-            Schedule(SimulateInitialize());
-        }
-
         public void TrackPromoLoad(PromoState state) => AlmediaLog.Debug($"Editor mock: TrackPromoLoad state={state.ToNativeString()}");
         public void TrackPromoClick(PromoState state) => AlmediaLog.Debug($"Editor mock: TrackPromoClick state={state.ToNativeString()}");
         public void TrackPopupShow() => AlmediaLog.Debug("Editor mock: TrackPopupShow");
@@ -149,7 +133,6 @@ namespace AlmediaLink.Bridge
         public void TrackPopupCtaClick() => AlmediaLog.Debug("Editor mock: TrackPopupCtaClick");
         public void TrackNotificationsShow(string notificationIdsJson) => AlmediaLog.Debug($"Editor mock: TrackNotificationsShow {notificationIdsJson}");
         public void TrackNotificationClick(string notificationId) => AlmediaLog.Debug($"Editor mock: TrackNotificationClick id={notificationId}");
-        public void TrackATTPreliminaryShow() => AlmediaLog.Debug("Editor mock: TrackATTPreliminaryShow");
         public void NotifyPlayerQuitting() => AlmediaLog.Debug("Editor mock: NotifyPlayerQuitting");
 
         // === Emit primitives — test hooks reachable via AlmediaLinkEditorMock facade ===
@@ -157,11 +140,13 @@ namespace AlmediaLink.Bridge
         // same gameObject.SendMessage path the SimulateX coroutines use; that path is
         // synchronous on the calling frame.
 
-        internal void EmitStatus(AlmediaStatus status)
+        internal void EmitStatus(AlmediaStatus status, string reason = null,
+            bool? canShowRewardHub = null, bool? canShowOffer = null)
         {
             _lastStatus = status;
-            var json = JsonUtility.ToJson(new StatusChangedResponse { status = StatusToNative(status) });
-            _host.gameObject.SendMessage("OnStatusChanged", json);
+
+            bool linked = status == AlmediaStatus.Linked;
+            SendStatus(StatusToNative(status), reason, canShowRewardHub ?? linked, canShowOffer ?? linked);
         }
 
         internal void EmitError(AlmediaErrorCode code, string message)
@@ -192,6 +177,11 @@ namespace AlmediaLink.Bridge
             _host.gameObject.SendMessage("OnNotifications", json);
         }
 
+        internal void EmitInGameRewardGrant(InGameRewardGrantResponse response)
+        {
+            _host.gameObject.SendMessage("OnInGameRewardGrantRequested", JsonUtility.ToJson(response));
+        }
+
         internal void EmitScreenPresented(AlmediaScreen screen)
         {
             _host.gameObject.SendMessage("OnScreenPresented", BuildScreenPresentedJson(screen));
@@ -202,11 +192,6 @@ namespace AlmediaLink.Bridge
         {
             _host.gameObject.SendMessage("OnScreenDismissed",
                 BuildScreenDismissedJson(screen, result, errorCode, errorMessage));
-        }
-
-        internal void EmitShowATTPrePrompt()
-        {
-            _host.gameObject.SendMessage("ShowATTPrePrompt", "{}");
         }
 
         internal void EmitNativeLog(AlmediaLogLevel level, string message)
@@ -263,12 +248,6 @@ namespace AlmediaLink.Bridge
                 if (c != null) _host.StopCoroutine(c);
         }
 
-        private IEnumerator SimulateShowATTPrePrompt()
-        {
-            yield return new WaitForSeconds(ATTDelay);
-            _host.gameObject.SendMessage("ShowATTPrePrompt", "{}");
-        }
-
         private IEnumerator SimulateInitialize()
         {
             yield return new WaitForSeconds(StatusTransitionDelay);
@@ -318,7 +297,7 @@ namespace AlmediaLink.Bridge
                         title = "Mock Reward",
                         message = "You earned a mock reward!",
                         timestamp = DateTime.UtcNow.AddMinutes(-5).ToString("o"),
-                        type = "reward"
+                        type = "popup"
                     },
                     new NotificationItem
                     {
@@ -326,7 +305,7 @@ namespace AlmediaLink.Bridge
                         title = "Level Complete",
                         message = "You completed level 3!",
                         timestamp = DateTime.UtcNow.AddHours(-1).ToString("o"),
-                        type = "status"
+                        type = "tray"
                     },
                     new NotificationItem
                     {
@@ -334,7 +313,7 @@ namespace AlmediaLink.Bridge
                         title = "Daily Bonus",
                         message = "Claim your $0.25 daily bonus!",
                         timestamp = DateTime.UtcNow.ToString("o"),
-                        type = "reward"
+                        type = "popup"
                     }
                 }
             };
@@ -344,7 +323,20 @@ namespace AlmediaLink.Bridge
         private void SendStatusChanged(string status)
         {
             if (StatusExtensions.TryFromString(status, out var parsed)) _lastStatus = parsed;
-            var json = JsonUtility.ToJson(new StatusChangedResponse { status = status });
+            bool linked = _lastStatus == AlmediaStatus.Linked;
+            SendStatus(status, null, linked, linked);
+        }
+
+        // Reproduces the native wire shape for a status callback: the reason field appears only
+        // when native has one to report, while the availability fields always ride along.
+        private void SendStatus(string status, string reason, bool canShowRewardHub, bool canShowOffer)
+        {
+            var reasonPart = reason == null ? "" : $"\"reason\":\"{EscapeJson(reason)}\",";
+            var json = "{" +
+                $"\"status\":\"{EscapeJson(status)}\",{reasonPart}" +
+                $"\"canShowRewardHub\":{(canShowRewardHub ? "true" : "false")}," +
+                $"\"canShowOffer\":{(canShowOffer ? "true" : "false")}" +
+                "}";
             _host.gameObject.SendMessage("OnStatusChanged", json);
         }
 

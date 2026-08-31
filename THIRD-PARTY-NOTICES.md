@@ -12,8 +12,7 @@ is compiled into an application.
 
 ### Poppins (typeface)
 
-- **Files:** `Poppins-Regular SDF.asset`, `Poppins-Medium SDF.asset`,
-  `Poppins-SemiBold SDF.asset`, `Poppins-Bold SDF.asset`
+- **Files:** `Poppins-Regular SDF.asset`, `Poppins-Bold SDF.asset`
   (TextMeshPro SDF assets generated from the Poppins typeface).
 - **License:** SIL Open Font License, Version 1.1 (see License Texts §A).
 - **Copyright:** Copyright 2020 The Poppins Project Authors

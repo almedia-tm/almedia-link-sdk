@@ -8,7 +8,9 @@ namespace AlmediaLink.UI
     [DisallowMultipleComponent]
     public class NotificationRowView : MonoBehaviour
     {
+#pragma warning disable CS0169, CS0649
         [SerializeField] private Image _iconImage;
+#pragma warning restore CS0169, CS0649
         [SerializeField] private TMP_Text _titleText;
         [SerializeField] private TMP_Text _messageText;
         [SerializeField] private TMP_Text _timestampText;
@@ -30,11 +32,9 @@ namespace AlmediaLink.UI
                 _button.onClick.RemoveListener(HandleClick);
         }
 
-        public void Populate(AlmediaNotification notification, Sprite icon)
+        public void Populate(AlmediaNotification notification)
         {
             _notificationId = notification.Id;
-            if (_iconImage != null)
-                _iconImage.sprite = icon;
             if (_titleText != null)
                 _titleText.text = notification.Title ?? "";
             if (_messageText != null)

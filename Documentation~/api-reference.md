@@ -14,9 +14,13 @@ The SDK is versioned. The current release is reflected in `AlmediaLinkSDK.Versio
 - [`AlmediaLinkSettings`](#almedialinksettings) - ScriptableObject configuration
 - Models
   - [`AlmediaStatus`](#almediastatus)
+  - [`AlmediaNotAvailableReason`](#almedianotavailablereason)
+  - [`AlmediaScreenAvailability`](#almediascreenavailability)
   - [`AlmediaError`](#almediaerror)
   - [`AlmediaErrorCode`](#almediaerrorcode)
   - [`AlmediaNotification`](#almedianotification)
+  - [`AlmediaInGameRewardGrant`](#almediaingamerewardgrant)
+  - [`AlmediaInGameReward`](#almediaingamereward)
   - [`PlacementType`](#placementtype)
   - [`AlmediaScreen`](#almediascreen)
   - [`InAppScreenResult`](#inappscreenresult)
@@ -25,12 +29,12 @@ The SDK is versioned. The current release is reflected in `AlmediaLinkSDK.Versio
 - [Editor testing](#editor-testing)
   - [`AlmediaLinkEditorMock`](#almedialinkeditormock)
   - [`MockNotification`](#mocknotification)
+  - [`MockInGameReward`](#mockingamereward)
 - UI components
   - [`LinkButtonController`](#linkbuttoncontroller)
   - [`LinkPopupController`](#linkpopupcontroller)
   - [`NotificationCardController`](#notificationcardcontroller)
   - [`ActivityOverlayController`](#activityoverlaycontroller)
-  - [`NotificationIconMap`](#notificationiconmap)
 - [Prefabs](#prefabs)
 - [Editor menu items](#editor-menu-items)
 - [Assembly definitions](#assembly-definitions)
@@ -43,7 +47,7 @@ The SDK is versioned. The current release is reflected in `AlmediaLinkSDK.Versio
 |----------------------|----------|
 | `AlmediaLink`        | The static `AlmediaLinkSDK` facade, `AlmediaLinkConfig`, `AlmediaLinkSettings`, `AlmediaLogLevel`. |
 | `AlmediaLink.Models` | Status, error, notification, placement, and in-app screen result types. |
-| `AlmediaLink.UI`     | UI controllers and `NotificationIconMap`. |
+| `AlmediaLink.UI`     | UI controllers. |
 | `AlmediaLink.Editor` | Editor-only tooling (Settings window, iOS post-build hook). Excluded from player builds. |
 | `AlmediaLink.Editor.Testing` | `AlmediaLinkEditorMock` and `MockNotification` - editor-only test hooks for driving non-happy paths. Excluded from player builds. |
 
@@ -76,6 +80,39 @@ if (AlmediaLinkSDK.CurrentStatus != AlmediaStatus.NotInitialized)
 AlmediaLinkSDK.OnStatusChanged += UpdateUi;
 ```
 
+#### `static AlmediaNotAvailableReason? NotAvailableReason { get; }`
+
+Why the SDK is unavailable for this player. Non-null exactly while `CurrentStatus` is `NotAvailable`, and `null` in every other status. When the SDK reports `NotAvailable`, read this value to answer why.
+
+A `NotAvailable` status whose reason the backend did not send, or sent as a value this SDK version does not recognize, reads as [`AlmediaNotAvailableReason.Unknown`](#almedianotavailablereason) rather than `null`. Treat `Unknown` as "not available, cause unspecified", not as an error.
+
+Updated **before** `OnStatusChanged` fires, so a handler can read it directly:
+
+```csharp
+AlmediaLinkSDK.OnStatusChanged += status =>
+{
+    if (status == AlmediaStatus.NotAvailable
+        && AlmediaLinkSDK.NotAvailableReason == AlmediaNotAvailableReason.Holdout)
+        Analytics.Track("link_holdout");
+};
+```
+
+The status itself is what your UI should react to - the entry point hides on `NotAvailable` regardless of reason. The reason exists for analytics, diagnostics, and messaging.
+
+#### `static AlmediaScreenAvailability ScreenAvailability { get; }`
+
+Which SDK screens can be presented right now - see [`AlmediaScreenAvailability`](#almediascreenavailability). Reads all-`false` until the SDK is ready.
+
+Updated with every SDK status update, and it can change while the status itself stays the same: a linked player can gain or lose a screen at any time. Check it before showing your own entry point, and subscribe to [`OnScreenAvailabilityChanged`](#static-event-actionalmediascreenavailability-onscreenavailabilitychanged) to keep it current.
+
+```csharp
+if (AlmediaLinkSDK.CurrentStatus == AlmediaStatus.Linked
+    && AlmediaLinkSDK.ScreenAvailability.CanShowRewardHub)
+    rewardsButton.SetActive(true);
+```
+
+Updated before either status or availability event fires. Do **not** cache it in your own field - see [Availability comes and goes](./integration-guide.md#availability-comes-and-goes).
+
 ---
 
 ### Methods
@@ -83,6 +120,8 @@ AlmediaLinkSDK.OnStatusChanged += UpdateUi;
 #### `static void Initialize(AlmediaLinkConfig config)`
 
 Boots the SDK. Merges `config` with `AlmediaLinkSettings`, instantiates the native bridge for the current platform, sends an `init` request to the backend, and starts the status lifecycle that resolves into a terminal `AlmediaStatus` (delivered via `OnStatusChanged` and reflected in `CurrentStatus`).
+
+With **Auto-Initialize From Prefabs** enabled in [`AlmediaLinkSettings`](#almedialinksettings), a `LinkButton` prefab calls this by itself with the settings values when nothing has called it by the end of the button's first frame. A call of your own always takes precedence.
 
 **Validation.** If the resolved integration key for the current platform is missing or empty (no value supplied by `config` and no value in the settings asset), the method synchronously raises `OnErrorOccurred` with `AlmediaErrorCode.InvalidConfiguration` and returns without initializing the bridge.
 
@@ -113,13 +152,17 @@ A no-op (with a warning logged via `OnLog`) if `Initialize` has not been called,
 
 Opens the reward progression screen in a webview. When the screen appears, [`OnScreenPresented`](#static-event-actionalmediascreen-onscreenpresented) fires with `AlmediaScreen.RewardHub`, and its dismissal is reported through [`OnScreenDismissed`](#static-event-actionalmediascreen-inappscreenresult-onscreendismissed).
 
-A no-op (with a warning) until the SDK is ready. Safe to call in any state: native opens the screen only for a linked player with a live progression URL, and otherwise no-ops with the reason logged through `OnLog` - a no-op call fires neither lifecycle event.
+A no-op (with a warning) until the SDK is ready. Safe to call in any state: native opens the screen only for a linked player for whom the reward hub is currently available, and otherwise does nothing with the reason logged through `OnLog` - a no-op call fires neither lifecycle event. Reward hub availability can change mid-session, so a call that worked earlier may later be a no-op.
+
+Check [`ScreenAvailability.CanShowRewardHub`](#almediascreenavailability) before calling, and gate your entry point on it rather than on a flag you cache yourself. Availability can still change between rendering a button and the tap.
 
 #### `static void ShowOffer()`
 
 Opens the offer screen in a webview. When the screen appears, [`OnScreenPresented`](#static-event-actionalmediascreen-onscreenpresented) fires with `AlmediaScreen.Offer`, and its dismissal is reported through [`OnScreenDismissed`](#static-event-actionalmediascreen-inappscreenresult-onscreendismissed).
 
-A no-op (with a warning) until the SDK is ready. Safe to call in any state: native opens the screen only for a linked player with a live offer URL, and otherwise no-ops with the reason logged through `OnLog` - a no-op call fires neither lifecycle event. Unlike the progression URL, the offer URL can appear and disappear between syncs, so a call that opened the screen earlier in the session may later be a no-op.
+A no-op (with a warning) until the SDK is ready. Safe to call in any state: native opens the screen only for a linked player for whom an offer is currently available, and otherwise does nothing with the reason logged through `OnLog` - a no-op call fires neither lifecycle event. Offer availability can change mid-session, so a call that worked earlier may later be a no-op.
+
+Check [`ScreenAvailability.CanShowOffer`](#almediascreenavailability) before calling, and gate your entry point on it rather than on a flag you cache yourself. Availability can still change between rendering a button and the tap; such a call does nothing and logs.
 
 #### `static void Engage()`
 
@@ -163,7 +206,29 @@ All events fire on the **Unity main thread**, so handlers can touch any Unity AP
 
 #### `static event Action<AlmediaStatus> OnStatusChanged`
 
-Fires on every status transition. The first emission carries the first terminal `AlmediaStatus` (any of `Eligible`, `Linked`, `NotAvailable`, `Blocked`, `Disabled`); subsequent emissions reflect later transitions. Use it both for one-shot setup that should happen once the SDK has resolved (gate on `status != NotInitialized` and your own guard flag) and for live UI that mirrors the current state. The bundled `LinkButtonController` subscribes to this event and shows or hides itself when status enters or leaves `Eligible`. `StartLinking`, `FetchNotifications`, and `StartNotificationPolling` called before this first emission are safe no-ops (a warning is logged), so a mistimed call is harmless rather than a crash.
+Fires on every status transition. The first emission carries the first terminal `AlmediaStatus` (any of `Eligible`, `Linked`, `NotAvailable`, `Blocked`, `Disabled`); subsequent emissions reflect later transitions. Use it both for one-shot setup that should happen once the SDK has resolved (gate on `status != NotInitialized` and your own guard flag) and for live UI that mirrors the current state. The bundled `LinkButtonController` subscribes to this event and to `OnScreenAvailabilityChanged`, and shows or hides itself from both. `StartLinking`, `FetchNotifications`, and `StartNotificationPolling` called before this first emission are safe no-ops (a warning is logged), so a mistimed call is harmless rather than a crash.
+
+Can fire more than once for `NotAvailable` when `NotAvailableReason` changes. It does not re-fire for a screen-availability-only change - that is what `OnScreenAvailabilityChanged` is for.
+
+#### `static event Action<AlmediaScreenAvailability> OnScreenAvailabilityChanged`
+
+Fires when `ScreenAvailability` changes, carrying the new snapshot. This is the signal that a linked player has gained or lost the ability to use `ShowRewardHub()` or `ShowOffer()`.
+
+```csharp
+AlmediaLinkSDK.OnScreenAvailabilityChanged += availability =>
+    offerButton.SetActive(availability.CanShowOffer);
+```
+
+**Ordering.** One native update produces at most two events. `CurrentStatus`, `NotAvailableReason`, and `ScreenAvailability` are all current **before either** fires, so a handler for one may read the others and see a consistent picture. When both fire, `OnStatusChanged` comes first.
+
+| What changed in the native update | `OnStatusChanged` | `OnScreenAvailabilityChanged` |
+|---|---|---|
+| Status (with or without availability) | fires | fires if availability also changed |
+| Reason only, status still `NotAvailable` | fires | - |
+| Availability only | - | fires |
+| Nothing (identical payload) | - | - |
+
+A handler that throws is logged through `OnLog` and does not prevent the other event from firing.
 
 #### `static event Action<string> OnLinkCompleted`
 
@@ -174,6 +239,25 @@ Does **not** fire for players who were already linked at `Initialize` time - the
 #### `static event Action<List<AlmediaNotification>> OnNotificationsReceived`
 
 Fires when a polling tick or `FetchNotifications()` returns one or more notifications. Empty results do not fire the event. Notifications are delivered in arrival order (oldest first).
+
+#### `static event Action<AlmediaInGameRewardGrant> OnInGameRewardGrantRequested`
+
+Fires when the backend instructs the game to grant in-game rewards. Credit the player and celebrate here.
+
+One event per grant. A grant is a bundle of one or more rewards granted together ([`AlmediaInGameRewardGrant.Rewards`](#almediaingamerewardgrant)): "250 gems and 3 spins for finishing the chapter" arrives as one event with one id and deserves one celebration. Three separate grants arriving in the same polling tick raise three events.
+
+**Delivery is at-least-once.** The same grant can arrive more than once. The server-to-server reward postback remains the authoritative record of what was granted; treat this event as the real-time convenience, not the ledger. Each grant has a unique [`Id`](#almediaingamerewardgrant) that a redelivery repeats, so deduplicate on it when a repeat credit matters to your economy. A short memory of recent ids suffices:
+
+```csharp
+private readonly HashSet<string> _credited = new HashSet<string>();
+
+AlmediaLinkSDK.OnInGameRewardGrantRequested += grant =>
+{
+    if (!_credited.Add(grant.Id)) return;   // redelivered; already credited
+    foreach (var reward in grant.Rewards)
+        Wallet.Credit(reward.Code, reward.Amount);
+};
+```
 
 #### `static event Action<AlmediaError> OnErrorOccurred`
 
@@ -235,7 +319,7 @@ Mutable POCO you build at runtime and pass to `Initialize`. Code-supplied values
 
 **`Idfv` (iOS).** Identifier for Vendor. When omitted (`null` or `""`), the iOS native layer collects it automatically via `UIDevice.current.identifierForVendor`; a supplied value overrides it. Unlike `Idfa`, it is not gated behind ATT. iOS-only - ignored on Android. Requires the matching iOS native binary; older bundled plugins ignore the field.
 
-**Android requires at least one device identifier.** On Android, native initialization succeeds only when at least one of `Gaid`, `Asid`, `Oaid`, `AdjustDeviceId`, or `AppsFlyerId` is non-empty. The C# layer does not pre-validate this - a config without any of them fails at the native layer. Identifiers that don't apply to the running platform are ignored, so they can be set unconditionally.
+**Android device identifiers.** The native SDK collects identifiers on its own where the platform allows. Initialization fails only on a device where nothing can be collected and none of `Gaid`, `Asid`, `Oaid`, `AdjustDeviceId`, or `AppsFlyerId` is passed. The C# layer does not pre-validate identifiers. Identifiers that don't apply to the running platform are ignored, so they can be set unconditionally.
 
 ---
 
@@ -253,12 +337,13 @@ All properties are read-only from outside the asset (set via the Unity Inspector
 
 #### SDK Configuration
 
-| Property                          | Type     | Default | Description |
-|-----------------------------------|----------|---------|-------------|
-| `IosIntegrationKey`               | `string` | empty   | Almedia-issued key for iOS. |
-| `AndroidIntegrationKey`           | `string` | empty   | Almedia-issued key for Android. |
-| `NotificationPollIntervalSeconds` | `int`    | 30      | Notification polling cadence. Min 5. |
-| `EnableDefaultNotificationUI`     | `bool`   | true    | When false, SDK does not show its NotificationCard or ActivityOverlay; host receives `OnNotificationsReceived` and renders. |
+| Property                          | Type     | Default | Description                                                                                                                                                                                    |
+|-----------------------------------|----------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `IosIntegrationKey`               | `string` | empty   | Almedia-issued key for iOS.                                                                                                                                                                    |
+| `AndroidIntegrationKey`           | `string` | empty   | Almedia-issued key for Android.                                                                                                                                                                |
+| `NotificationPollIntervalSeconds` | `int`    | 30      | Notification polling cadence. Min 5.                                                                                                                                                           |
+| `EnableDefaultNotificationUI`     | `bool`   | true    | When false, SDK does not show its NotificationCard or ActivityOverlay; host receives `OnNotificationsReceived` and renders.                                                                    |
+| Auto-Initialize From Prefabs      | `bool`   | true    | When on, a `LinkButton` prefab initializes the SDK with the settings values unless the host has already called `Initialize`. Settings toggle only, with no public accessor. |
 
 #### Link Popup
 
@@ -281,13 +366,16 @@ All properties are read-only from outside the asset (set via the Unity Inspector
 |--------------------------------|---------|-------------|
 | `NotificationBackgroundColor`  | `Color` | Notification card background. |
 
-#### Prefab Overrides
+#### Default UI Prefabs
 
 | Property                  | Type                          | Description |
 |---------------------------|-------------------------------|-------------|
-| `LinkPopupOverride`       | `LinkPopupController`         | Prefab Variant to instantiate instead of the SDK default. |
-| `NotificationCardOverride`| `NotificationCardController`  | Prefab Variant for the notification card. |
-| `ActivityOverlayOverride` | `ActivityOverlayController`   | Prefab Variant for the notification list overlay. |
+| `NotificationCardPrefab`  | `NotificationCardController`  | The notification card the SDK instantiates when notifications arrive. Pre-filled with the bundled prefab; assign a Prefab Variant to customize. |
+| `ActivityOverlayPrefab`   | `ActivityOverlayController`   | The notification list overlay opened from a stacked card. Same semantics. |
+
+Both slots track **Enable Default Notification UI**: disabling the toggle clears slots that point at the bundled prefabs so they (and their art) stay out of the build, and re-enabling restores the bundled defaults into empty slots. A variant you assigned yourself survives the toggle in both directions. The link popup is not configured here - it is a serialized reference on each `LinkButton` prefab.
+
+Deprecated members (`LinkPopupOverride`, `NotificationCardOverride`, `ActivityOverlayOverride`) carry their guidance in their `[Obsolete]` messages. One behavioral note: a popup assigned in `LinkPopupOverride` wins over the button's popup reference.
 
 ---
 
@@ -304,11 +392,57 @@ Mirrors the SDK's runtime state. Delivered to `OnStatusChanged` on every transit
 | `NotInitialized`  | Default value before init finishes. Never persists. |
 | `Eligible`        | Service is available and the player has not linked yet. Linking UI should be visible. |
 | `Linked`          | Player has linked their Freecash account. Reward notifications can flow. |
-| `NotAvailable`    | Service is not available for this user (region, eligibility). Linking UI should hide. |
+| `NotAvailable`    | Service is not available for this user (region, eligibility, holdout). Linking UI should hide. [`NotAvailableReason`](#almedianotavailablereason) says why. |
 | `Blocked`         | User is blocked by the backend (abuse, fraud). Linking UI should hide. |
 | `Disabled`        | Integration is killswitched at the backend level. SDK runs in a no-op mode until the backend re-enables it. |
 
 Terminal values: `Eligible`, `Linked`, `NotAvailable`, `Blocked`, `Disabled`. `NotInitialized` is the pre-init default and is never re-entered after the first terminal transition.
+
+The status says whether the service is available; it does not say whether a given screen can be opened. A `Linked` player may still have no reward hub - see [`AlmediaScreenAvailability`](#almediascreenavailability).
+
+---
+
+### `AlmediaNotAvailableReason`
+
+Namespace: `AlmediaLink.Models` · enum
+
+Why the SDK is `NotAvailable` for this player. Read it from `AlmediaLinkSDK.NotAvailableReason`, which is non-null exactly while `CurrentStatus` is `NotAvailable`.
+
+| Value     | Meaning |
+|-----------|---------|
+| `Unknown` | The backend sent no reason, or one this SDK version does not recognize. Not an error - read it as "not available, cause unspecified". |
+| `Holdout` | The player is in the holdout (control) group and is deliberately excluded from the Link experience. |
+
+The mapping from the backend's value happens inside the SDK, so a reason added by the backend later lands on `Unknown` in an existing build rather than surfacing a value your code cannot name. Handle `Unknown` as a real case; do not `switch` exhaustively without a default.
+
+The reason never changes what the SDK does - the entry point hides on `NotAvailable` whatever the reason. Use it for analytics, support diagnostics, and messaging.
+
+---
+
+### `AlmediaScreenAvailability`
+
+Namespace: `AlmediaLink.Models` · readonly struct
+
+Which SDK screens native can present right now. Read it from `AlmediaLinkSDK.ScreenAvailability`; changes fire [`OnScreenAvailabilityChanged`](#static-event-actionalmediascreenavailability-onscreenavailabilitychanged).
+
+```csharp
+public readonly struct AlmediaScreenAvailability : IEquatable<AlmediaScreenAvailability>
+{
+    public bool CanShowRewardHub { get; }
+    public bool CanShowOffer { get; }
+}
+```
+
+| Member             | Meaning |
+|--------------------|---------|
+| `CanShowRewardHub` | `ShowRewardHub()` would present a screen right now. |
+| `CanShowOffer`     | `ShowOffer()` would present a screen right now. |
+
+Value type with `Equals`, `==`, and `!=`, so two snapshots can be compared directly.
+
+**These are not derived from the status.** Both read `false` for a player who is not linked, but a `Linked` player can also have either flag `false` - a reward hub the backend has withdrawn, or an offer that has not appeared yet - and the flags can flip between syncs without the status moving. Availability is a live signal, not a property of the status.
+
+Both flags read `false` until the SDK reaches its first terminal status.
 
 ---
 
@@ -360,7 +494,10 @@ public string           Title      { get; }
 public string           Message    { get; }
 public string           Timestamp  { get; }
 public DateTimeOffset?  ReceivedAt { get; }
-public string           Type       { get; }
+public string           Display    { get; }
+public string           IconUrl    { get; }
+
+[Obsolete] public string Type      { get; }   // alias of Display
 ```
 
 | Property     | Notes |
@@ -370,7 +507,49 @@ public string           Type       { get; }
 | `Message`    | Body. May be multi-line; render in a wrapping text element. |
 | `Timestamp`  | Raw ISO 8601 string as delivered by the backend (e.g. `"2025-03-15T10:30:00Z"`). Preserved for logging / re-serialization; prefer `ReceivedAt` for display logic. |
 | `ReceivedAt` | Parsed UTC `DateTimeOffset?`, or `null` when `Timestamp` is empty or unparseable. Always normalized to UTC (offset 0), so `DateTimeOffset.UtcNow - notification.ReceivedAt.Value` gives the elapsed time directly. |
-| `Type`       | Opaque category string (e.g. `"reward"`, `"status"`). Used by `NotificationIconMap` to pick an icon. |
+| `Display`    | Presentation hint: `"popup"` or `"tray"`. Open set - treat values you do not recognize as `"popup"`. Never null or empty. |
+| `IconUrl`    | Absolute URL of the notification's icon, or `null`. The bundled UI does not render it; the notification prefab supplies the row icon. In custom UI, load it yourself and fall back to your own art when null or unreachable. |
+| `Type`       | **Obsolete.** Alias of `Display`. Until 1.2.0 this carried a free-form category (`"reward"`, `"status"`); those values no longer exist on the wire, so comparisons against them never match. |
+
+---
+
+### `AlmediaInGameRewardGrant`
+
+Namespace: `AlmediaLink.Models` · class
+
+An in-game-reward grant delivered via [`OnInGameRewardGrantRequested`](#static-event-actionalmediaingamerewardgrant-oningamerewardgrantrequested). Every reward in `Rewards` was granted together and belongs to one celebration.
+
+```csharp
+public string                             Id         { get; }
+public string                             Timestamp  { get; }
+public DateTimeOffset?                    ReceivedAt { get; }
+public IReadOnlyList<AlmediaInGameReward> Rewards    { get; }
+```
+
+| Property     | Notes |
+|--------------|-------|
+| `Id`         | Server-issued and unique per grant; a redelivery repeats it. The dedup key for hosts that want exactly-once crediting. |
+| `Timestamp`  | Raw ISO 8601 string of when the backend issued the grant. |
+| `ReceivedAt` | Parsed UTC `DateTimeOffset?`, or `null` when `Timestamp` is empty or unparseable. |
+| `Rewards`    | The reward line items. At least one entry. |
+
+---
+
+### `AlmediaInGameReward`
+
+Namespace: `AlmediaLink.Models` · class
+
+One reward line item of an [`AlmediaInGameRewardGrant`](#almediaingamerewardgrant).
+
+```csharp
+public double Amount { get; }
+public string Code   { get; }
+```
+
+| Property   | Notes |
+|------------|-------|
+| `Amount`   | Amount to credit. Whole today, but the contract permits fractions - do not truncate to an integer. |
+| `Code`     | Reward code agreed with Almedia (e.g. `"gems"`, `"spins"`). Treat unrecognized codes as a no-op rather than an error. |
 
 ---
 
@@ -459,7 +638,7 @@ public enum AlmediaLogLevel
 
 ## Editor testing
 
-Editor-only test hook for driving the SDK into any state (status, error, notifications, native log) from a play-mode test or an editor host script. See [Driving non-happy paths](./integration-guide.md#driving-non-happy-paths) in the integration guide for the narrative.
+Editor-only test hook for driving the SDK into any state (status, error, notifications, in-game reward grants, native log) from a play-mode test or an editor host script. See [Driving non-happy paths](./integration-guide.md#driving-non-happy-paths) in the integration guide for the narrative.
 
 The whole API lives in `AlmediaLink.Editor.Testing` (assembly `AlmediaLink.Editor`, `includePlatforms:["Editor"]`). Host references must be wrapped in `#if UNITY_EDITOR` so they don't reach iOS/Android player compilation.
 
@@ -473,9 +652,21 @@ The first call to any method here puts the underlying editor mock into **manual 
 
 Every method **throws `InvalidOperationException`** if called before `AlmediaLinkSDK.Initialize` - the throw is deliberate so test ordering bugs surface at test-author time instead of as silent no-ops.
 
-#### `static void EmitStatus(AlmediaStatus status)`
+#### `static void EmitStatus(AlmediaStatus status, string reason = null, bool? canShowRewardHub = null, bool? canShowOffer = null)`
 
-Delivers a status transition. `AlmediaLinkSDK.CurrentStatus` and `OnStatusChanged` reflect it on the same call - no `yield return` required before reading.
+Delivers a status transition. `CurrentStatus`, `NotAvailableReason`, `ScreenAvailability` and their events reflect it on the same call - no `yield return` required before reading.
+
+`reason` is the raw wire string and is meaningful only with `AlmediaStatus.NotAvailable`: `"holdout"` maps to [`AlmediaNotAvailableReason.Holdout`](#almedianotavailablereason), any other string to `Unknown`.
+
+A call that does not pass the availability parameters, e.g. `EmitStatus(AlmediaStatus.Linked)`, gets them defaulted to `true` for `Linked` and `false` for every other status. Pass them explicitly for other shapes:
+
+```csharp
+// Holdout player.
+AlmediaLinkEditorMock.EmitStatus(AlmediaStatus.NotAvailable, "holdout");
+
+// Linked, but the reward hub is gone - the bundled LinkButton hides.
+AlmediaLinkEditorMock.EmitStatus(AlmediaStatus.Linked, canShowRewardHub: false, canShowOffer: false);
+```
 
 #### `static void EmitError(AlmediaErrorCode code, string message)`
 
@@ -488,6 +679,20 @@ Fires `OnLinkCompleted` with the current UTC timestamp. Use it to test "celebrat
 #### `static void EmitNotifications(params MockNotification[] items)`
 
 Fires `OnNotificationsReceived` with the supplied items, converted into the SDK's internal model. Pass no arguments for an empty batch (note: `AlmediaLinkSDK` short-circuits empty batches and does **not** raise `OnNotificationsReceived` - useful for verifying the "no new rewards" branch on the SDK side).
+
+#### `static void EmitInGameRewardGrant(params MockInGameReward[] rewards)`
+
+Fires `OnInGameRewardGrantRequested` with a generated grant id and the current UTC timestamp, delivered through the same bridge path the native plugins use. Pass at least one reward; the SDK drops a rewardless grant as malformed, which a bare `EmitInGameRewardGrant()` can exercise.
+
+#### `static void EmitInGameRewardGrant(string id, params MockInGameReward[] rewards)`
+
+Same, with an explicit grant id (null or empty generates one). Delivery on device is at-least-once, so call this twice with the same id to reproduce a redelivered grant and verify your dedup:
+
+```csharp
+var rewards = new[] { new MockInGameReward(250, "gems"), new MockInGameReward(3, "spins") };
+AlmediaLinkEditorMock.EmitInGameRewardGrant("grant-1", rewards);
+AlmediaLinkEditorMock.EmitInGameRewardGrant("grant-1", rewards);   // must credit once
+```
 
 #### `static void EmitScreenPresented(AlmediaScreen screen)`
 
@@ -519,28 +724,56 @@ public readonly struct MockNotification
     public readonly string Id;
     public readonly string Title;
     public readonly string Message;
-    public readonly string Type;
+    public readonly string Display;
     public readonly string Timestamp;
+    public readonly string IconUrl;
 
-    public MockNotification(string id, string title, string message, string type, string timestamp = null);
+    [Obsolete] public string Type { get; }   // alias of Display
+
+    public MockNotification(string id, string title, string message, string display,
+        string timestamp = null, string iconUrl = null);
 }
 ```
 
-A null `timestamp` defaults to `DateTime.UtcNow.ToString("o")` (ISO-8601), matching the format the backend emits.
+`display` models the wire presentation hint (`"popup"` or `"tray"`; native never forwards anything else). A null `timestamp` defaults to `DateTime.UtcNow.ToString("o")` (ISO-8601), matching the format the backend emits. A null `iconUrl` models the omitted wire key and surfaces as `AlmediaNotification.IconUrl == null`.
+
+---
+
+### `MockInGameReward`
+
+Namespace: `AlmediaLink.Editor.Testing` · readonly struct
+
+One reward line item for [`EmitInGameRewardGrant`](#static-void-emitingamerewardgrantparams-mockingamereward-rewards).
+
+```csharp
+public readonly struct MockInGameReward
+{
+    public readonly double Amount;
+    public readonly string Code;
+
+    public MockInGameReward(double amount, string code);
+}
+```
 
 ---
 
 ## UI components
 
-All UI controllers live in `AlmediaLink.UI`. The SDK ships ready-to-drop prefabs in `Packages/com.almedia.link/Runtime/Resources/Prefabs/`; host code never needs to instantiate or call into the controllers directly. Customize each by editing its prefab or by creating a Prefab Variant and assigning it in **Almedia → Settings → Prefab Overrides**.
+All UI controllers live in `AlmediaLink.UI`. The SDK ships ready-to-drop prefabs in `Packages/com.almedia.link/Runtime/Prefabs/`; host code never needs to instantiate or call into the controllers directly. Customize by editing a prefab or creating a Prefab Variant. The popup, card, and overlay prefabs each carry an **Apply Host Settings** checkbox controlling whether the text/colors from **Almedia → Settings** are applied to them at runtime - untick it on a fully hand-authored variant.
 
 ---
 
 ### `LinkButtonController`
 
-The component on the `LinkButton` prefabs. Two-state: visible while `Eligible` (a linking entry - tapping opens the `LinkPopup`) and while `Linked` (a rewards entry - tapping opens the reward hub via `ShowRewardHub()`); hidden in every other status. Each state is a self-contained subtree in the prefab (`Eligible` / `Linked`, each pairing a content object with its own button and background), so its art and press colours are authored in the prefab and the controller only toggles which one shows.
+The component on the `LinkButton` prefabs. Two-state: visible while `Eligible` (a linking entry - tapping opens the `LinkPopup`) and while `Linked` **with the reward hub available** (a rewards entry - tapping opens it via `ShowRewardHub()`); hidden in every other case, including a linked player whose [`ScreenAvailability.CanShowRewardHub`](#almediascreenavailability) is `false`. Hiding is deliberate there: showing the eligible state to a linked player would be wrong, and a rewards button that opens nothing is the failure this exists to remove. Promo tracking follows what is shown, so that case reports `promo_load` with `Hidden`.
 
-Drop one of the four `LinkButton` variants (`LinkButtonA`-`LinkButtonD`) into your Canvas - no code needed. To reproduce the behaviour on a button of your own, `AlmediaLinkSDK.Engage()` is the one-call equivalent (it links directly rather than opening the popup - see [`Engage()`](#static-void-engage)).
+The controller re-evaluates on both `OnStatusChanged` and `OnScreenAvailabilityChanged`, so a reward hub withdrawn mid-session hides the button without a status change. Each state is a self-contained subtree in the prefab (`Eligible` / `Linked`, each pairing a content object with its own button and background), so its art and press colours are authored in the prefab and the controller only toggles which one shows.
+
+Drop one of the four `LinkButton` variants (`LinkButtonA`-`LinkButtonD`) into your Canvas - no code needed. With **Auto-Initialize From Prefabs** enabled in **Almedia → Settings**, the button calls `Initialize` with the settings values when nothing has called it by the end of its first frame. An earlier call of your own runs first, and a later call with a different configuration takes over. See [Initialize the SDK](./integration-guide.md#initialize-the-sdk).
+
+To reproduce the behaviour on a button of your own, `AlmediaLinkSDK.Engage()` is the one-call equivalent (it links directly rather than opening the popup - see [`Engage()`](#static-void-engage)).
+
+The button also carries the **Link Popup** reference it opens on an eligible tap. Assign a Prefab Variant there to customize the popup; with the field emptied, an eligible tap starts linking directly (with a one-time warning).
 
 ---
 
@@ -548,7 +781,7 @@ Drop one of the four `LinkButton` variants (`LinkButtonA`-`LinkButtonD`) into yo
 
 The component on the `LinkPopup` prefab. Renders the modal account-linking popup; the CTA button triggers `AlmediaLinkSDK.StartLinking()`, and the popup self-dismisses on close or when linking completes.
 
-Customize via Prefab Variant assigned in **Almedia → Settings → Prefab Overrides → Link Popup**. Text and colors are also directly editable in **Almedia → Settings → Link Popup Text**.
+Customize via Prefab Variant assigned on the `LinkButton` prefab's **Link Popup** field. Text and colors are also directly editable in **Almedia → Settings → Link Popup Text**, applied while the popup's **Apply Host Settings** checkbox is ticked.
 
 ---
 
@@ -556,7 +789,7 @@ Customize via Prefab Variant assigned in **Almedia → Settings → Prefab Overr
 
 The component on the `NotificationCard` prefab. Slides up from the bottom when notifications arrive, auto-dismisses after a few seconds, and opens the `ActivityOverlay` if multiple notifications stack.
 
-Customize via Prefab Variant assigned in **Almedia → Settings → Prefab Overrides → Notification Card**. The dismiss delay and bottom padding are inspector-tunable on the prefab.
+Customize via Prefab Variant assigned in **Almedia → Settings → Default UI Prefabs → Notification Card**. The dismiss delay and bottom padding are inspector-tunable on the prefab.
 
 ---
 
@@ -564,25 +797,19 @@ Customize via Prefab Variant assigned in **Almedia → Settings → Prefab Overr
 
 The component on the `ActivityOverlay` prefab. Full-screen notification list, opened by tapping a stacked `NotificationCard`.
 
-Customize via Prefab Variant assigned in **Almedia → Settings → Prefab Overrides → Activity Overlay**.
-
----
-
-### `NotificationIconMap`
-
-`ScriptableObject` that maps `AlmediaNotification.Type` strings to sprites. Customize by editing the asset at `Assets/AlmediaLink/Resources/NotificationIconMap.asset` in the Inspector - add an entry for each notification type your backend emits, set a default icon for unmapped types.
-
-If you turn off `EnableDefaultNotificationUI` and render notifications yourself, the icon map is no longer consulted.
+Customize via Prefab Variant assigned in **Almedia → Settings → Default UI Prefabs → Activity Overlay**.
 
 ---
 
 ## Prefabs
 
-All shipping prefabs live under `Packages/com.almedia.link/Runtime/Resources/Prefabs/`. They can be:
+All shipping prefabs live under `Packages/com.almedia.link/Runtime/Prefabs/`. They can be:
 
 - Dropped directly into a scene Canvas (`LinkButtonA` to `LinkButtonD`).
-- Instantiated by the SDK from Resources at runtime (the rest).
-- Used as the base for Prefab Variants assigned in **Almedia → Settings → Prefab Overrides**.
+- Instantiated by the SDK through serialized references (the rest): the popup from the button's **Link Popup** field, the notification card and overlay from **Almedia → Settings → Default UI Prefabs**.
+- Used as the base for Prefab Variants.
+
+Only prefabs that something references are included in a build.
 
 | Prefab                    | Root component               |
 |---------------------------|------------------------------|

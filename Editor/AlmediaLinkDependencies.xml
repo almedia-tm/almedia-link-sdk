@@ -23,12 +23,5 @@
 
         <!-- Kotlin serialization. 1.5.1 for the same reason: last Kotlin 1.8 build. -->
         <androidPackage spec="org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1"/>
-
-        <!-- AndroidX -->
-        <androidPackage spec="androidx.lifecycle:lifecycle-runtime-ktx:2.6.2"/>
-        <androidPackage spec="androidx.lifecycle:lifecycle-process:2.6.2"/>
-        <!-- 1.0.0 avoids byteArrayPreferencesKey (added in 1.1.0) and KMP multi-variant
-             metadata that breaks D8 dexing on AGP 7.1.2 -->
-        <androidPackage spec="androidx.datastore:datastore-preferences:1.0.0"/>
     </androidPackages>
 </dependencies>

@@ -12,8 +12,6 @@ namespace AlmediaLink.Bridge
         void FetchNotifications();
         void StartNotificationPolling();
         void StopNotificationPolling();
-        void ContinueWithATT();
-        void SkipATT();
         void TrackPromoLoad(PromoState state);
         void TrackPromoClick(PromoState state);
         void TrackPopupShow();
@@ -21,7 +19,6 @@ namespace AlmediaLink.Bridge
         void TrackPopupCtaClick();
         void TrackNotificationsShow(string notificationIdsJson);
         void TrackNotificationClick(string notificationId);
-        void TrackATTPreliminaryShow();
         void NotifyPlayerQuitting();
     }
 }

@@ -65,6 +65,7 @@ MonoBehaviour:
   _linked:
     Content: {fileID: 6748831015778334215}
     Button: {fileID: 73339331185385207}
+  _linkPopup: {fileID: 109903986789150082, guid: 81608c9266bd316458e505fd550024e9, type: 3}
 --- !u!1 &4076511045126384802
 GameObject:
   m_ObjectHideFlags: 0
@@ -132,8 +133,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: Rewards
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 259553ed5da12204b92952cd65073943, type: 2}
-  m_sharedMaterial: {fileID: -9172569445550852954, guid: 259553ed5da12204b92952cd65073943, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 2cc36851719a936478903a3b6e90b9e6, type: 2}
+  m_sharedMaterial: {fileID: 967751611216344873, guid: 2cc36851719a936478903a3b6e90b9e6, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -266,8 +267,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: Link & Earn
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: 259553ed5da12204b92952cd65073943, type: 2}
-  m_sharedMaterial: {fileID: -9172569445550852954, guid: 259553ed5da12204b92952cd65073943, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 2cc36851719a936478903a3b6e90b9e6, type: 2}
+  m_sharedMaterial: {fileID: 967751611216344873, guid: 2cc36851719a936478903a3b6e90b9e6, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []

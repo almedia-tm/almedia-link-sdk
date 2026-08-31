@@ -31,12 +31,6 @@ namespace AlmediaLink.Bridge
         private static extern void AlmediaLink_StopNotificationPolling();
 
         [DllImport("__Internal")]
-        private static extern void AlmediaLink_ContinueWithATT();
-
-        [DllImport("__Internal")]
-        private static extern void AlmediaLink_SkipATT();
-
-        [DllImport("__Internal")]
         private static extern void AlmediaLink_TrackPromoLoad(string state);
 
         [DllImport("__Internal")]
@@ -56,9 +50,6 @@ namespace AlmediaLink.Bridge
 
         [DllImport("__Internal")]
         private static extern void AlmediaLink_TrackNotificationClick(string notificationId);
-        
-        [DllImport("__Internal")]
-        private static extern void AlmediaLink_TrackATTPreliminaryShow();
 
         [DllImport("__Internal")]
         private static extern void AlmediaLink_NotifyPlayerQuitting();
@@ -71,8 +62,6 @@ namespace AlmediaLink.Bridge
         public void FetchNotifications() => AlmediaLink_FetchNotifications();
         public void StartNotificationPolling() => AlmediaLink_StartNotificationPolling();
         public void StopNotificationPolling() => AlmediaLink_StopNotificationPolling();
-        public void ContinueWithATT() => AlmediaLink_ContinueWithATT();
-        public void SkipATT() => AlmediaLink_SkipATT();
         public void TrackPromoLoad(PromoState state) => AlmediaLink_TrackPromoLoad(state.ToNativeString());
         public void TrackPromoClick(PromoState state) => AlmediaLink_TrackPromoClick(state.ToNativeString());
         public void TrackPopupShow() => AlmediaLink_TrackPopupShow();
@@ -80,7 +69,6 @@ namespace AlmediaLink.Bridge
         public void TrackPopupCtaClick() => AlmediaLink_TrackPopupCtaClick();
         public void TrackNotificationsShow(string notificationIdsJson) => AlmediaLink_TrackNotificationsShow(notificationIdsJson);
         public void TrackNotificationClick(string notificationId) => AlmediaLink_TrackNotificationClick(notificationId);
-        public void TrackATTPreliminaryShow() => AlmediaLink_TrackATTPreliminaryShow();
         public void NotifyPlayerQuitting() => AlmediaLink_NotifyPlayerQuitting();
     }
 }

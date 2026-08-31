@@ -20,9 +20,9 @@ The SDK has three layers:
 
 | Platform | Minimum version | Tested on    |
 |----------|------------------|--------------|
-| Unity    | 2022.3 LTS       | 2022.3.62f2  |
-| iOS      | 16.0             | 17.x, 18.x, 26.x |
-| Android  | API 25           | API 27-36    |
+| Unity    | 2022.3 LTS       | 2022.3.62f2, 6000.4.9f1  |
+| iOS      | 13.x             | 16.x, 17.x, 18.x, 26.x |
+| Android  | API 23           | API 25-37    |
 
 The native plugins pull standard AndroidX and Kotlin libraries - see the [integration guide](./Documentation~/integration-guide.md#android--gradle-dependencies).
 
@@ -44,6 +44,10 @@ After install, open **Almedia > Settings** and fill in the iOS and Android integ
 
 ## Quick Start
 
+The shortest integration is three steps: install the package, set the integration keys in **Almedia → Settings**, and drag a `LinkButton` prefab onto a Canvas. The button initializes the SDK by itself using the settings values.
+
+Initialize in code when you have runtime values to pass:
+
 ```csharp
 using UnityEngine;
 using AlmediaLink;
@@ -55,7 +59,7 @@ public class AlmediaBootstrap : MonoBehaviour
     {
         AlmediaLinkSDK.Initialize(new AlmediaLinkConfig
         {
-            // Android needs at least one of: Gaid, Asid, Oaid, AdjustDeviceId, AppsFlyerId.
+            // IDs improve attribution and cover devices where automatic collection fails.
             // IDs that don't apply to the current platform are ignored.
             Idfa = "YOUR_IDFA",
             Gaid = "YOUR_GAID",
@@ -68,9 +72,9 @@ public class AlmediaBootstrap : MonoBehaviour
 
 All SDK events fire on the Unity main thread. See the [integration guide](./Documentation~/integration-guide.md#threading) for details.
 
-On Android the SDK initializes only when the config carries at least one device/advertising ID - any of `Gaid`, `Asid`, `Oaid`, `AdjustDeviceId`, or `AppsFlyerId`. Use the same config to supply `AccountId` and the other identifiers when available.
+The native SDK collects device identifiers on its own. Pass IDs to cover the devices where it cannot, and use the same config to supply `AccountId` and the other identifiers when available.
 
-Drop one of the `LinkButton` prefabs (`LinkButtonA`, `LinkButtonB`, `LinkButtonC`, or `LinkButtonD`) into a Canvas. It auto-shows when the player is eligible and not yet linked, and hides itself afterwards.
+Drop one of the `LinkButton` prefabs (`LinkButtonA`, `LinkButtonB`, `LinkButtonC`, or `LinkButtonD`) into a Canvas. It shows itself as a linking entry while the player is eligible and as a rewards entry once they are linked, and hides in every other case - including a linked player whose reward hub the backend has withdrawn, so it never offers a screen that would not open. When nothing has called `Initialize` and **Auto-Initialize From Prefabs** is on, the button does it itself - see [Initialize the SDK](./Documentation~/integration-guide.md#initialize-the-sdk).
 
 ---
 
@@ -79,7 +83,7 @@ Drop one of the `LinkButton` prefabs (`LinkButtonA`, `LinkButtonB`, `LinkButtonC
 Three levels of depth, from least to most invasive. Full detail in [Customize the UI](./Documentation~/integration-guide.md#customize-the-ui).
 
 1. **Text and colors** - edit the strings and primary colors in **Almedia > Settings**. The built-in prefabs read the settings asset at runtime, so this works on a read-only UPM install.
-2. **Prefab Variants** - create a Prefab Variant of any bundled UI prefab (`LinkPopup`, `NotificationCard`, `ActivityOverlay`) and assign it under **Almedia > Settings > Prefab Overrides** for full re-skin / layout control.
+2. **Prefab Variants** - create a Prefab Variant of any bundled UI prefab for full re-skin / layout control: assign a popup variant on the LinkButton's **Link Popup** field, and card/overlay variants under **Almedia > Settings > Default UI Prefabs**.
 3. **Bring your own UI** - disable the default notification UI in settings and subscribe to `OnNotificationsReceived`, `OnStatusChanged`, and `OnLinkCompleted` to render your own visuals. The SDK still drives status, polling, and linking.
 
 ---
@@ -96,12 +100,15 @@ using AlmediaLink.Models;
 
 AlmediaLinkSDK.Initialize(new AlmediaLinkConfig { /* test keys */ });
 AlmediaLinkEditorMock.EmitStatus(AlmediaStatus.Blocked);
+AlmediaLinkEditorMock.EmitStatus(AlmediaStatus.NotAvailable, "holdout");                  // holdout player
+AlmediaLinkEditorMock.EmitStatus(AlmediaStatus.Linked, canShowRewardHub: false,           // linked, nothing to open
+                                                       canShowOffer: false);
 AlmediaLinkEditorMock.EmitError(AlmediaErrorCode.NetworkFailure, "Mock: backend unreachable");
 AlmediaLinkEditorMock.EmitNotifications(); // empty fetch
 #endif
 ```
 
-Surface: `EmitStatus`, `EmitError`, `EmitLinkCompleted`, `EmitNotifications`, `EmitScreenPresented`, `EmitScreenDismissed`, `EmitNativeLog`, `CancelPending`.
+Surface: `EmitStatus`, `EmitError`, `EmitLinkCompleted`, `EmitNotifications`, `EmitInGameRewardGrant`, `EmitScreenPresented`, `EmitScreenDismissed`, `EmitNativeLog`, `CancelPending`.
 
 - **Editor-only.** Lives in the `AlmediaLink.Editor` assembly (`includePlatforms:["Editor"]`); not present in iOS/Android player builds. Wrap host references in `#if UNITY_EDITOR` so your own code still compiles for device targets.
 - **Manual mode.** The first call to any `AlmediaLinkEditorMock` method puts the bridge into manual mode for the rest of the play session — the auto-simulate coroutines that fire `Eligible`/`linked` for the happy path stop firing, so they can't race against your emits. Manual mode resets on domain reload.

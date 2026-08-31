@@ -45,7 +45,8 @@ namespace AlmediaLink.UI
         /// so the SDK must not overlay settings onto it. Set by AlmediaLinkUIManager before
         /// the UI activates; true for the SDK's built-in prefabs.
         /// </summary>
-        internal bool ApplyHostSettings = true;
+        [Tooltip("Apply text and color values from AlmediaLinkSettings to this instance. Untick on a Prefab Variant you have fully authored yourself.")]
+        [SerializeField] internal bool ApplyHostSettings = true;
 
         private void Awake()
         {
@@ -143,9 +144,7 @@ namespace AlmediaLink.UI
         private void UpdateCardContent(AlmediaNotification notification)
         {
             if (_rowView == null) return;
-            var iconMap = NotificationIconMap.Load();
-            var icon = iconMap != null ? iconMap.GetIcon(notification.Type) : null;
-            _rowView.Populate(notification, icon);
+            _rowView.Populate(notification);
         }
 
         private void UpdateStackedState()

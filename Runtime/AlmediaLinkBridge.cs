@@ -13,10 +13,10 @@ namespace AlmediaLink
         internal static event Action<StatusChangedResponse> StatusChanged;
         internal static event Action<LinkCompletedResponse> LinkCompleted;
         internal static event Action<NotificationsReceivedResponse> NotificationsReceived;
+        internal static event Action<InGameRewardGrantResponse> InGameRewardGrantRequested;
         internal static event Action<ErrorCallbackResponse> ErrorOccurred;
         internal static event Action<AlmediaScreen> ScreenPresented;
         internal static event Action<AlmediaScreen, ScreenDismissedResponse> ScreenDismissed;
-        internal static event Action ShowATTPrePromptRequested;
         internal static event Action<NativeLogResponse> NativeLogReceived;
 
         // These strings are the external native contract - the iOS .xcframework and
@@ -28,10 +28,10 @@ namespace AlmediaLink
             "OnStatusChanged",
             "OnLinkCompleted",
             "OnNotifications",
+            "OnInGameRewardGrantRequested",
             "OnError",
             "OnScreenPresented",
             "OnScreenDismissed",
-            "ShowATTPrePrompt",
             "OnNativeLog",
         };
 
@@ -53,6 +53,12 @@ namespace AlmediaLink
             SafeInvoke(nameof(OnNotifications), () => NotificationsReceived?.Invoke(response));
         }
 
+        public void OnInGameRewardGrantRequested(string json)
+        {
+            if (!TryParse<InGameRewardGrantResponse>(json, nameof(OnInGameRewardGrantRequested), out var response)) return;
+            SafeInvoke(nameof(OnInGameRewardGrantRequested), () => InGameRewardGrantRequested?.Invoke(response));
+        }
+
         public void OnError(string json)
         {
             if (!TryParse<ErrorCallbackResponse>(json, nameof(OnError), out var response)) return;
@@ -71,11 +77,6 @@ namespace AlmediaLink
             if (!TryParse<ScreenDismissedResponse>(json, nameof(OnScreenDismissed), out var response)) return;
             if (!TryParseScreen(response.screen, nameof(OnScreenDismissed), out var screen)) return;
             SafeInvoke(nameof(OnScreenDismissed), () => ScreenDismissed?.Invoke(screen, response));
-        }
-
-        public void ShowATTPrePrompt(string json)
-        {
-            SafeInvoke(nameof(ShowATTPrePrompt), () => ShowATTPrePromptRequested?.Invoke());
         }
 
         public void OnNativeLog(string json)
@@ -142,10 +143,10 @@ namespace AlmediaLink
             StatusChanged = null;
             LinkCompleted = null;
             NotificationsReceived = null;
+            InGameRewardGrantRequested = null;
             ErrorOccurred = null;
             ScreenPresented = null;
             ScreenDismissed = null;
-            ShowATTPrePromptRequested = null;
             NativeLogReceived = null;
         }
 

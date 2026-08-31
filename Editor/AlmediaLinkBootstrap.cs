@@ -5,7 +5,7 @@ using UnityEngine;
 namespace AlmediaLink.Editor
 {
     /// <summary>
-    /// Seeds default copies of <c>AlmediaLinkSettings</c> and <c>NotificationIconMap</c>
+    /// Seeds a default copy of <c>AlmediaLinkSettings</c>
     /// into the host project's <c>Assets/AlmediaLink/Resources/</c> on first editor
     /// reload after the package is installed. Never overwrites existing host copies.
     /// </summary>
@@ -13,7 +13,7 @@ namespace AlmediaLink.Editor
     internal static class AlmediaLinkBootstrap
     {
         private const string TargetDir   = "Assets/AlmediaLink/Resources";
-        private const string PkgDefaults = "Packages/com.almedia.link/Runtime/Resources/Defaults";
+        private const string PkgDefaults = "Packages/com.almedia.link/Editor/Defaults";
         
         static AlmediaLinkBootstrap()
         {
@@ -30,7 +30,6 @@ namespace AlmediaLink.Editor
         {
             bool changed = false;
             changed |= EnsureOne("AlmediaLinkSettings");
-            changed |= EnsureOne("NotificationIconMap");
 
             if (changed)
             {

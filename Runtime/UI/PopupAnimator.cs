@@ -8,7 +8,7 @@ namespace AlmediaLink.UI
 {
     /// <summary>
     /// Reusable component that handles popup layout, animation, and safe area.
-    /// Attach alongside a popup controller (LinkPopupController, ATTPrePromptController, etc.).
+    /// Attach alongside a popup controller (e.g. LinkPopupController).
     /// Controllers call Show()/Hide() and this component handles the rest.
     /// </summary>
     [DisallowMultipleComponent]

@@ -23,33 +23,12 @@ namespace AlmediaLink.UI
             _initialized = true;
         }
         
-        internal static void ShowATTPrePrompt()
+        internal static void ShowLinkPopup(LinkPopupController prefab)
         {
-            var overrideRef = AlmediaLinkSettings.Load()?.AttPrePromptOverride;
-            var prefab = LoadPrefabOrError<ATTPrePromptController>(
-                "Prefabs/ATTPrePrompt", "ATT pre-prompt", overrideRef);
-            if (prefab == null)
-            {
-                AlmediaLinkSDK.ContinueWithATT();
-                return;
-            }
+            if (prefab == null) return; // the caller owns the fallback and the warning
 
             var instance = Object.Instantiate(prefab);
             Object.DontDestroyOnLoad(instance.gameObject);
-            instance.ApplyHostSettings = overrideRef == null;
-            instance.Show();
-        }
-
-        internal static void ShowLinkPopup()
-        {
-            var overrideRef = AlmediaLinkSettings.Load()?.LinkPopupOverride;
-            var prefab = LoadPrefabOrError<LinkPopupController>(
-                "Prefabs/LinkPopup", "Link popup", overrideRef);
-            if (prefab == null) return;
-
-            var instance = Object.Instantiate(prefab);
-            Object.DontDestroyOnLoad(instance.gameObject);
-            instance.ApplyHostSettings = overrideRef == null;
             instance.Show();
         }
 
@@ -105,9 +84,7 @@ namespace AlmediaLink.UI
         {
             if (_notificationCard != null) return;
 
-            var overrideRef = AlmediaLinkSettings.Load()?.NotificationCardOverride;
-            var prefab = LoadPrefabOrError<NotificationCardController>(
-                "Prefabs/NotificationCard", "Default notification UI", overrideRef);
+            var prefab = RequirePrefab(AlmediaLinkSettings.Load()?.NotificationCardPrefab, "Notification Card");
             if (prefab == null) return;
 
             var canvasGo = new GameObject("AlmediaLinkNotificationCanvas");
@@ -125,16 +102,13 @@ namespace AlmediaLink.UI
             canvasGo.AddComponent<GraphicRaycaster>();
 
             _notificationCard = Object.Instantiate(prefab, canvasGo.transform);
-            _notificationCard.ApplyHostSettings = overrideRef == null;
         }
 
         private static void EnsureActivityOverlayExists()
         {
             if (_activityOverlay != null) return;
 
-            var overrideRef = AlmediaLinkSettings.Load()?.ActivityOverlayOverride;
-            var prefab = LoadPrefabOrError<ActivityOverlayController>(
-                "Prefabs/ActivityOverlay", "Activity overlay", overrideRef);
+            var prefab = RequirePrefab(AlmediaLinkSettings.Load()?.ActivityOverlayPrefab, "Activity Overlay");
             if (prefab == null) return;
 
             // Reuse the existing notification canvas
@@ -151,26 +125,21 @@ namespace AlmediaLink.UI
             }
 
             _activityOverlay = Object.Instantiate(prefab, canvas.transform);
-            _activityOverlay.ApplyHostSettings = overrideRef == null;
         }
 
-        /// <summary>
-        /// Resolves a prefab to instantiate. If <paramref name="overrideRef"/> is non-null,
-        /// it wins (host-provided Prefab Variant). Otherwise loads the SDK default from
-        /// <c>Resources/{path}</c>, logging a one-shot error if the default is missing.
-        /// </summary>
-        private static T LoadPrefabOrError<T>(string path, string featureName, T overrideRef = null) where T : Object
+        // Warn-once resolver. The editor keeps these references in lockstep with the
+        // EnableDefaultNotificationUI toggle, so a null here means a hand-edited settings asset.
+        private static T RequirePrefab<T>(T prefab, string featureName) where T : Object
         {
-            if (overrideRef != null) return overrideRef;
-
-            var prefab = Resources.Load<T>(path);
-            if (prefab == null && _missingPrefabsLogged.Add(path))
+            if (prefab != null) return prefab;
+            if (_missingPrefabsLogged.Add(featureName))
             {
-                AlmediaLog.Error(
-                    $"{typeof(T).Name} prefab missing at 'Resources/{path}'. {featureName} is disabled. " +
-                    "Verify the AlmediaLink package was imported correctly, or disable the default UI in AlmediaLinkSettings.");
+                AlmediaLog.Warning(
+                    $"{featureName} prefab is not assigned in AlmediaLinkSettings while the default " +
+                    "notification UI is enabled. Assign it in Almedia > Settings (re-ticking " +
+                    "'Enable Default Notification UI' restores the bundled prefabs), or disable the default UI.");
             }
-            return prefab;
+            return null;
         }
     }
 }

@@ -18,6 +18,7 @@ namespace AlmediaLink.Editor
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_androidIntegrationKey"), "Android Integration Key");
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_notificationPollIntervalSeconds"), "Polling Interval (sec)");
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_enableDefaultNotificationUI"), "Enable Default Notification UI");
+            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_autoInitializeFromPrefab"), "Auto-Initialize From Prefabs");
 
             GUILayout.Space(8);
             EditorGUILayout.LabelField("Link Popup Text", EditorStyles.boldLabel);
@@ -43,14 +44,14 @@ namespace AlmediaLink.Editor
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_notificationBackgroundColor"), "Background Color");
 
             GUILayout.Space(8);
-            EditorGUILayout.LabelField("Prefab Overrides (optional)", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Default UI Prefabs", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "Assign Prefab Variants of the SDK base prefabs to customize the UI. " +
-                "Leave empty to use the built-in defaults. Variants automatically receive SDK updates.",
+                "The notification UI the SDK spawns when the default UI is enabled. Assign Prefab " +
+                "Variants to customize; disabling the toggle clears these so the prefabs stay out of " +
+                "your build. The Link Popup is configured on the LinkButton prefab itself.",
                 MessageType.Info);
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_linkPopupOverride"), "Link Popup");
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_notificationCardOverride"), "Notification Card");
-            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_activityOverlayOverride"), "Activity Overlay");
+            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_notificationCardPrefab"), "Notification Card");
+            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_activityOverlayPrefab"), "Activity Overlay");
 
             EditorGUIUtility.labelWidth = prevLabelWidth;
 

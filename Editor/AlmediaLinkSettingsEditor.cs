@@ -23,6 +23,7 @@ namespace AlmediaLink.Editor
         private SerializedProperty _androidIntegrationKey;
         private SerializedProperty _notificationPollIntervalSeconds;
         private SerializedProperty _enableDefaultNotificationUI;
+        private SerializedProperty _autoInitializeFromPrefab;
 
         // UI Text
         private SerializedProperty _popupTitle;
@@ -39,10 +40,9 @@ namespace AlmediaLink.Editor
         // Notifications
         private SerializedProperty _notificationBackgroundColor;
 
-        // Prefab Overrides
-        private SerializedProperty _linkPopupOverride;
-        private SerializedProperty _notificationCardOverride;
-        private SerializedProperty _activityOverlayOverride;
+        // Default UI Prefabs
+        private SerializedProperty _notificationCardPrefab;
+        private SerializedProperty _activityOverlayPrefab;
 
         [MenuItem("Almedia/Settings")]
         public static void ShowWindow()
@@ -107,6 +107,7 @@ namespace AlmediaLink.Editor
             _androidIntegrationKey = _serializedObject.FindProperty("_androidIntegrationKey");
             _notificationPollIntervalSeconds = _serializedObject.FindProperty("_notificationPollIntervalSeconds");
             _enableDefaultNotificationUI = _serializedObject.FindProperty("_enableDefaultNotificationUI");
+            _autoInitializeFromPrefab = _serializedObject.FindProperty("_autoInitializeFromPrefab");
 
             _popupTitle = _serializedObject.FindProperty("_popupTitle");
             _benefit1Title = _serializedObject.FindProperty("_benefit1Title");
@@ -121,9 +122,8 @@ namespace AlmediaLink.Editor
 
             _notificationBackgroundColor = _serializedObject.FindProperty("_notificationBackgroundColor");
 
-            _linkPopupOverride = _serializedObject.FindProperty("_linkPopupOverride");
-            _notificationCardOverride = _serializedObject.FindProperty("_notificationCardOverride");
-            _activityOverlayOverride = _serializedObject.FindProperty("_activityOverlayOverride");
+            _notificationCardPrefab = _serializedObject.FindProperty("_notificationCardPrefab");
+            _activityOverlayPrefab = _serializedObject.FindProperty("_activityOverlayPrefab");
         }
 
         private void OnGUI()
@@ -155,7 +155,7 @@ namespace AlmediaLink.Editor
             GUILayout.Space(4);
             DrawCollapsibleSection("show_notifications", "Notifications", DrawNotifications, false);
             GUILayout.Space(4);
-            DrawCollapsibleSection("show_prefab_overrides", "Prefab Overrides", DrawPrefabOverrides, false);
+            DrawCollapsibleSection("show_prefab_overrides", "Default UI Prefabs", DrawDefaultUIPrefabs, false);
             GUILayout.Space(8);
             DrawEnvironment();
 
@@ -179,6 +179,7 @@ namespace AlmediaLink.Editor
             DrawFieldWithWarning(_androidIntegrationKey, "Android Integration Key", "Android Integration Key is required.");
             DrawField(_notificationPollIntervalSeconds, "Polling Interval (sec)");
             DrawField(_enableDefaultNotificationUI, "Enable Default Notification UI");
+            DrawField(_autoInitializeFromPrefab, "Auto-Initialize From Prefabs");
 
             EditorGUIUtility.labelWidth = prevLabelWidth;
         }
@@ -209,16 +210,17 @@ namespace AlmediaLink.Editor
             DrawField(_notificationBackgroundColor, "Background Color");
         }
 
-        private void DrawPrefabOverrides()
+        private void DrawDefaultUIPrefabs()
         {
             EditorGUILayout.HelpBox(
-                "Optional. Assign Prefab Variants of the SDK base prefabs to customize the UI. " +
-                "Leave empty to use the built-in defaults. Variants automatically receive SDK updates " +
-                "for non-overridden properties.",
+                "The notification UI the SDK spawns when 'Enable Default Notification UI' is on. " +
+                "Assign Prefab Variants to customize; variants automatically receive SDK updates for " +
+                "non-overridden properties. Disabling the toggle clears these references so the prefabs " +
+                "(and their art) stay out of your build; re-enabling restores the bundled defaults. " +
+                "The Link Popup is configured on the LinkButton prefab itself, not here.",
                 MessageType.Info);
-            DrawField(_linkPopupOverride, "Link Popup");
-            DrawField(_notificationCardOverride, "Notification Card");
-            DrawField(_activityOverlayOverride, "Activity Overlay");
+            DrawField(_notificationCardPrefab, "Notification Card");
+            DrawField(_activityOverlayPrefab, "Activity Overlay");
         }
 
         private void DrawEnvironment()
