@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-17
+
+### Fixed
+- Fixed the Android guard that stops native callbacks reaching Unity once the player begins quitting. The call that switches it on asked for an instance method where the compiled native one is static, so it failed - logging `NoSuchMethodError: no non-static method with name='notifyPlayerQuitting'` during shutdown - and the guard stayed off, leaving callbacks able to reach a player that was already tearing down. The call is corrected, and a new test pins every Unity-to-native call to the shape of the method it targets, so a mismatch fails the build instead of shipping.
+- Fixed an Android build failure - `Duplicate class a.a found in modules AlmediaLinkSDK.aar and ...` - when the app also ships another obfuscated library. R8 used to minify the SDK's internal class names into top-level packages `a`, `b`, `c` and so on, which any other SDK obfuscated the same way also claims. Internal classes now live under `co.almedia.internal` (and `co.almedia.bridge.internal`), so the names cannot collide. Nothing about the public API changes.
+
 ## [1.2.0] - 2026-08-31
 
 ### Added

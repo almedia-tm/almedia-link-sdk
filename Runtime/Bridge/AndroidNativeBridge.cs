@@ -88,7 +88,7 @@ namespace AlmediaLink.Bridge
         public void TrackNotificationsShow(string notificationIdsJson) => _plugin.Call("trackNotificationsShow", notificationIdsJson);
         public void TrackNotificationClick(string notificationId) => _plugin.Call("trackNotificationClick", notificationId);
 
-        public void NotifyPlayerQuitting() => _plugin.Call("notifyPlayerQuitting");
+        public void NotifyPlayerQuitting() => _plugin.CallStatic("notifyPlayerQuitting");
 
         public void Dispose()
         {
