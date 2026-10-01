@@ -1,14 +1,15 @@
+using System.Collections.Generic;
 using AlmediaLink.UI;
 using UnityEngine;
 using UnityEngine.Serialization;
 
 namespace AlmediaLink
 {
-    [CreateAssetMenu(fileName = "AlmediaLinkSettings", menuName = "AlmediaLink/Settings", order = 0)]
+    [CreateAssetMenu(fileName = "AlmediaSettings", menuName = "Almedia/Settings", order = 0)]
     public sealed class AlmediaLinkSettings : ScriptableObject
     {
-        private const string ResourcePath = "AlmediaLinkSettings";
-        internal const int DefaultPollInterval = 30;
+        private const string ResourcePath = "AlmediaSettings";
+        private const string LegacyResourcePath = "AlmediaLinkSettings";
 
         [Header("SDK Configuration")]
         [Tooltip("Almedia issued key identifying the host app on iOS")]
@@ -19,13 +20,17 @@ namespace AlmediaLink
 
         [Tooltip("Polling interval in seconds for fetching notifications")]
         [Min(5)]
-        [SerializeField] private int _notificationPollIntervalSeconds = DefaultPollInterval;
+        [SerializeField] private int _notificationPollIntervalSeconds = AlmediaSDK.AlmediaConfig.DefaultPollInterval;
 
-        [Tooltip("When enabled, the SDK renders the built-in NotificationCard and ActivityOverlay. Disable to use your own UI.")]
+        [Tooltip("Decides whose UI renders notifications: on, the SDK's NotificationCard and ActivityOverlay; off, yours from OnNotificationsReceived. To stop notifications reaching the player at all, disable Notifications under Disabled Features.")]
         [SerializeField] private bool _enableDefaultNotificationUI = true;
 
         [Tooltip("When enabled, a LinkButton prefab initializes the SDK by itself (using the keys above) unless the host has already called Initialize. Disable when initialization timing must stay under host control, e.g. consent-gated flows.")]
         [SerializeField] private bool _autoInitializeFromPrefab = false;
+
+        [Header("Disabled Features")]
+        [Tooltip("Parts of the Link experience this game hides from every player. Permanent choices go here; per-player rollouts and A/B tests are driven from code, which can add to this set but never remove from it.")]
+        [SerializeField] private List<string> _disabledFeatures = new List<string>();
 
         [Header("UI Text")]
         [Tooltip("LinkPopup headline.")]
@@ -73,6 +78,9 @@ namespace AlmediaLink
         [FormerlySerializedAs("_activityOverlayOverride")]
         [SerializeField] private ActivityOverlayController _activityOverlayPrefab;
 
+        [Tooltip("The popup ShowLink() presents. A LinkButton opens the popup assigned on the button itself. A popup assigned here ships in every build. Clear it if you never call ShowLink().")]
+        [SerializeField] private LinkPopupController _linkPopupPrefab;
+
         // 1.x compatibility: intentionally undrawn but still serialized and honored (wins over the
         // button's own popup reference). Not dead code.
         [SerializeField] private LinkPopupController _linkPopupOverride;
@@ -103,6 +111,7 @@ namespace AlmediaLink
         public NotificationCardController NotificationCardPrefab => _notificationCardPrefab;
         public ActivityOverlayController ActivityOverlayPrefab => _activityOverlayPrefab;
 
+        internal LinkPopupController LinkPopupPrefab => _linkPopupPrefab;
         internal LinkPopupController LegacyLinkPopupOverride => _linkPopupOverride;
 
         #region Obsolete 1.x surface - compatibility shims
@@ -148,26 +157,31 @@ namespace AlmediaLink
         #endregion
 
         private static AlmediaLinkSettings _cachedInstance;
+        private static bool _loadAttempted;
 
         /// <summary>
-        /// Loads the settings asset from Resources/AlmediaLinkSettings.
+        /// Loads the settings asset from Resources/AlmediaSettings, falling back to the 1.x name Resources/AlmediaLinkSettings.
         /// Returns the cached instance on subsequent calls. Unity fake-null semantics
         /// auto-invalidate the cache if the underlying asset is destroyed; call
         /// <see cref="InvalidateCache"/> to force a fresh load in other cases
-        /// (editor tooling, tests, domain-reload-disabled play mode).
+        /// (editor tooling, tests, domain-reload-disabled play mode). A failed load is remembered until <see cref="InvalidateCache"/> is called.
         /// </summary>
         public static AlmediaLinkSettings Load()
         {
             if (_cachedInstance != null)
                 return _cachedInstance;
 
-            _cachedInstance = Resources.Load<AlmediaLinkSettings>(ResourcePath);
+            if (_loadAttempted && ReferenceEquals(_cachedInstance, null))
+                return null;
+
+            _cachedInstance = Resources.Load<AlmediaLinkSettings>(ResourcePath)
+                ?? Resources.Load<AlmediaLinkSettings>(LegacyResourcePath);
+            _loadAttempted = true;
 
             if (_cachedInstance == null)
             {
                 AlmediaLog.Error(
-                    $"[AlmediaLink] AlmediaLinkSettings asset not found at Resources/{ResourcePath}. " +
-                               "Create one via: Right-click in Assets/AlmediaLink/Resources → Create → Almedia → Link SDK Settings.");
+                    $"[Almedia] Settings asset not found at Resources/{ResourcePath}. Open Almedia > Settings to create it.");
             }
 
             return _cachedInstance;
@@ -180,16 +194,36 @@ namespace AlmediaLink
         public static void InvalidateCache()
         {
             _cachedInstance = null;
+            _loadAttempted = false;
+        }
+
+        internal static AlmediaSDK.AlmediaConfigDefaults ToDefaults(AlmediaLinkSettings settings) => new AlmediaSDK.AlmediaConfigDefaults
+        {
+            IosIntegrationKey = settings != null ? settings.IosIntegrationKey : null,
+            AndroidIntegrationKey = settings != null ? settings.AndroidIntegrationKey : null,
+            NotificationsPollingIntervalSec = settings != null ? settings.NotificationPollIntervalSeconds : (int?)null,
+            DisabledFeatures = settings != null ? settings.DisabledFeatures() : null
+        };
+
+        // Stored as wire names so the asset stays readable and order-independent. A name this SDK
+        // version does not know is skipped with a warning rather than failing initialization.
+        private IEnumerable<AlmediaSDK.AlmediaFeature> DisabledFeatures()
+        {
+            foreach (var name in _disabledFeatures)
+            {
+                if (AlmediaSDK.AlmediaFeature.TryFromWireName(name, out var feature)) yield return feature;
+                else AlmediaLog.Warning($"Ignoring unknown disabled feature '{name}' in the settings asset.");
+            }
         }
 
 #if UNITY_EDITOR
-        private const string PkgCardPath = "Packages/com.almedia.link/Runtime/Prefabs/NotificationCard.prefab";
-        private const string PkgOverlayPath = "Packages/com.almedia.link/Runtime/Prefabs/ActivityOverlay.prefab";
+        private const string PkgCardPath = AlmediaSDK.AlmediaPackage.Root + "/Runtime/Prefabs/NotificationCard.prefab";
+        private const string PkgOverlayPath = AlmediaSDK.AlmediaPackage.Root + "/Runtime/Prefabs/ActivityOverlay.prefab";
 
         private void OnValidate()
         {
             if (_notificationPollIntervalSeconds < 5)
-                _notificationPollIntervalSeconds = DefaultPollInterval;
+                _notificationPollIntervalSeconds = AlmediaSDK.AlmediaConfig.DefaultPollInterval;
 
             SyncNotificationPrefabsWithToggle();
             InvalidateCache();
@@ -221,7 +255,7 @@ namespace AlmediaLink
         private static bool IsBundled(Object asset)
         {
             if (asset == null) return false;
-            return UnityEditor.AssetDatabase.GetAssetPath(asset).StartsWith("Packages/com.almedia.link");
+            return UnityEditor.AssetDatabase.GetAssetPath(asset).StartsWith(AlmediaSDK.AlmediaPackage.Root);
         }
 #endif
     }

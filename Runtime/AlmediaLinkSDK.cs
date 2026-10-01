@@ -2,15 +2,21 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using AlmediaLink.Bridge;
 using AlmediaLink.Models;
 using AlmediaLink.UI;
+using NewApi = AlmediaSDK.Almedia;
+using NewModels = AlmediaSDK;
 
 namespace AlmediaLink
 {
+    /// <summary>
+    /// The 1.x surface, kept for existing integrations. Every member forwards to
+    /// <see cref="AlmediaSDK.Almedia"/>; values, cases and event order are those of 1.x.
+    /// New integrations use <see cref="AlmediaSDK.Almedia"/>.
+    /// </summary>
     public static class AlmediaLinkSDK
     {
-        public static string Version => "1.2.1";
+        public static string Version => NewApi.Version;
 
         /// <summary>
         /// The SDK's current lifecycle status. Reads <see cref="AlmediaStatus.NotInitialized"/>
@@ -19,7 +25,7 @@ namespace AlmediaLink
         /// first <see cref="OnStatusChanged"/> has already fired) to recover the latest
         /// status without missing a beat.
         /// </summary>
-        public static AlmediaStatus CurrentStatus => _almediaStatus;
+        public static AlmediaStatus CurrentStatus => Compat.ToOldApi(NewApi.Legacy.Status);
 
         /// <summary>
         /// Why <see cref="CurrentStatus"/> is <see cref="AlmediaStatus.NotAvailable"/>. Non-null
@@ -27,7 +33,7 @@ namespace AlmediaLink
         /// unrecognized wire reason reads as <see cref="AlmediaNotAvailableReason.Unknown"/>.
         /// Current before <see cref="OnStatusChanged"/> fires, so handlers can read it directly.
         /// </summary>
-        public static AlmediaNotAvailableReason? NotAvailableReason => _notAvailableReason;
+        public static AlmediaNotAvailableReason? NotAvailableReason => Compat.ToOldApi(NewApi.Legacy.Reason);
 
         /// <summary>
         /// Which SDK screens native can present right now. A fresh snapshot arrives with every
@@ -35,9 +41,69 @@ namespace AlmediaLink
         /// linked player losing the reward hub between syncs. Reads all-false until the SDK
         /// is ready.
         /// </summary>
-        public static AlmediaScreenAvailability ScreenAvailability => _screenAvailability;
+        public static AlmediaScreenAvailability ScreenAvailability => Compat.ToOldApi(NewApi.Legacy.Availability);
 
-        public static event Action<AlmediaStatus> OnStatusChanged;
+        /// <summary>
+        /// The latest progress snapshot, or <c>null</c> before the first one arrives and after native
+        /// clears it with the message stream token. The SDK keeps it in memory only. A scene that
+        /// loads after <see cref="OnProgressUpdated"/> fired can read it. It is current before that
+        /// event fires.
+        /// </summary>
+        public static AlmediaProgress Progress => Compat.ToOldApi(NewApi.Progress);
+
+        private static readonly EventBridge<NewModels.LegacyStatus, AlmediaStatus> StatusBridge =
+            new EventBridge<NewModels.LegacyStatus, AlmediaStatus>(nameof(OnStatusChanged), Compat.ToOldApi,
+                h => NewApi.LegacyStatusChanged += h, h => NewApi.LegacyStatusChanged -= h);
+
+        private static readonly EventBridge<NewModels.LegacyScreenAvailability, AlmediaScreenAvailability> AvailabilityBridge =
+            new EventBridge<NewModels.LegacyScreenAvailability, AlmediaScreenAvailability>(nameof(OnScreenAvailabilityChanged), Compat.ToOldApi,
+                h => NewApi.LegacyAvailabilityChanged += h, h => NewApi.LegacyAvailabilityChanged -= h);
+
+        private static readonly EventBridge<string, string> LinkCompletedBridge =
+            new EventBridge<string, string>(nameof(OnLinkCompleted), s => s,
+                h => NewApi.OnLinkCompleted += h, h => NewApi.OnLinkCompleted -= h);
+
+        private static readonly EventBridge<List<NewModels.AlmediaNotification>, List<AlmediaNotification>> NotificationsBridge =
+            new EventBridge<List<NewModels.AlmediaNotification>, List<AlmediaNotification>>(nameof(OnNotificationsReceived), Compat.ToOldApi,
+                h => NewApi.OnNotificationsReceived += h, h => NewApi.OnNotificationsReceived -= h);
+
+        private static readonly EventBridge<NewModels.AlmediaInGameRewardGrant, AlmediaInGameRewardGrant> GrantBridge =
+            new EventBridge<NewModels.AlmediaInGameRewardGrant, AlmediaInGameRewardGrant>(nameof(OnInGameRewardGrantRequested), Compat.ToOldApi,
+                h => NewApi.OnInGameRewardGrantRequested += h, h => NewApi.OnInGameRewardGrantRequested -= h);
+
+        private static readonly EventBridge<NewModels.AlmediaProgress, AlmediaProgress> ProgressBridge =
+            new EventBridge<NewModels.AlmediaProgress, AlmediaProgress>(nameof(OnProgressUpdated), Compat.ToOldApi,
+                h => NewApi.OnProgressUpdated += h, h => NewApi.OnProgressUpdated -= h);
+
+        private static readonly EventBridge<NewModels.AlmediaTaskCompletion, AlmediaTaskCompletion> TaskCompletedBridge =
+            new EventBridge<NewModels.AlmediaTaskCompletion, AlmediaTaskCompletion>(nameof(OnTaskCompleted), Compat.ToOldApi,
+                h => NewApi.OnTaskCompleted += h, h => NewApi.OnTaskCompleted -= h);
+
+        private static readonly EventBridge<NewModels.AlmediaBalanceChange, AlmediaBalanceChange> BalanceChangedBridge =
+            new EventBridge<NewModels.AlmediaBalanceChange, AlmediaBalanceChange>(nameof(OnBalanceChanged), Compat.ToOldApi,
+                h => NewApi.OnBalanceChanged += h, h => NewApi.OnBalanceChanged -= h);
+
+        private static readonly EventBridge<NewModels.AlmediaError, AlmediaError> ErrorBridge =
+            new EventBridge<NewModels.AlmediaError, AlmediaError>(nameof(OnErrorOccurred), Compat.ToOldApi,
+                h => NewApi.OnErrorOccurred += h, h => NewApi.OnErrorOccurred -= h);
+
+        private static readonly EventBridge<NewModels.AlmediaScreen, AlmediaScreen> PresentedBridge =
+            new EventBridge<NewModels.AlmediaScreen, AlmediaScreen>(nameof(OnScreenPresented), Compat.ToOldApi,
+                h => NewApi.OnScreenPresented += h, h => NewApi.OnScreenPresented -= h);
+
+        private static readonly EventBridge<NewModels.AlmediaScreen, NewModels.AlmediaInAppScreenResult, AlmediaScreen, InAppScreenResult> DismissedBridge =
+            new EventBridge<NewModels.AlmediaScreen, NewModels.AlmediaInAppScreenResult, AlmediaScreen, InAppScreenResult>(nameof(OnScreenDismissed), Compat.ToOldApi, Compat.ToOldApi,
+                h => NewApi.OnScreenDismissed += h, h => NewApi.OnScreenDismissed -= h);
+
+        private static readonly EventBridge<AlmediaSDK.AlmediaLogLevel, string, AlmediaLogLevel, string> LogBridge =
+            new EventBridge<AlmediaSDK.AlmediaLogLevel, string, AlmediaLogLevel, string>(nameof(OnLog), Compat.ToOldApi, s => s,
+                h => NewApi.OnLog += h, h => NewApi.OnLog -= h);
+
+        public static event Action<AlmediaStatus> OnStatusChanged
+        {
+            add => StatusBridge.Add(value);
+            remove => StatusBridge.Remove(value);
+        }
 
         /// <summary>
         /// Fires when <see cref="ScreenAvailability"/> changed. When one native update changes
@@ -45,9 +111,23 @@ namespace AlmediaLink
         /// snapshot (<see cref="CurrentStatus"/>, <see cref="NotAvailableReason"/>,
         /// <see cref="ScreenAvailability"/>) is current before either event fires.
         /// </summary>
-        public static event Action<AlmediaScreenAvailability> OnScreenAvailabilityChanged;
-        public static event Action<string> OnLinkCompleted;
-        public static event Action<List<AlmediaNotification>> OnNotificationsReceived;
+        public static event Action<AlmediaScreenAvailability> OnScreenAvailabilityChanged
+        {
+            add => AvailabilityBridge.Add(value);
+            remove => AvailabilityBridge.Remove(value);
+        }
+
+        public static event Action<string> OnLinkCompleted
+        {
+            add => LinkCompletedBridge.Add(value);
+            remove => LinkCompletedBridge.Remove(value);
+        }
+
+        public static event Action<List<AlmediaNotification>> OnNotificationsReceived
+        {
+            add => NotificationsBridge.Add(value);
+            remove => NotificationsBridge.Remove(value);
+        }
 
         /// <summary>
         /// Fires when the backend instructs the game to grant in-game rewards. Credit
@@ -61,8 +141,50 @@ namespace AlmediaLink
         /// <see cref="AlmediaInGameRewardGrant.Id"/> that a redelivery repeats, so deduplicate
         /// on it when a repeat credit matters to your economy.
         /// </remarks>
-        public static event Action<AlmediaInGameRewardGrant> OnInGameRewardGrantRequested;
-        public static event Action<AlmediaError> OnErrorOccurred;
+        public static event Action<AlmediaInGameRewardGrant> OnInGameRewardGrantRequested
+        {
+            add => GrantBridge.Add(value);
+            remove => GrantBridge.Remove(value);
+        }
+
+        /// <summary>
+        /// Fires when <see cref="Progress"/> changes: a newer snapshot, or <c>null</c> when native
+        /// clears the snapshot with the message stream token. The accessor already holds the new
+        /// value. A handler can read the argument or the accessor. Render the progress UI here.
+        /// </summary>
+        public static event Action<AlmediaProgress> OnProgressUpdated
+        {
+            add => ProgressBridge.Add(value);
+            remove => ProgressBridge.Remove(value);
+        }
+
+        /// <summary>
+        /// Fires when the server reports a completed task. The event is historical and best-effort.
+        /// The task is not always in <see cref="Progress"/>, and the event does not update the
+        /// snapshot. A replay can deliver it twice. Deduplicate on <see cref="AlmediaTaskCompletion.Id"/>.
+        /// </summary>
+        public static event Action<AlmediaTaskCompletion> OnTaskCompleted
+        {
+            add => TaskCompletedBridge.Add(value);
+            remove => TaskCompletedBridge.Remove(value);
+        }
+
+        /// <summary>
+        /// Fires when the server reports a balance change. The event is historical and best-effort.
+        /// The balance can differ from <see cref="Progress"/>, and the event does not update the
+        /// snapshot. A replay can deliver it twice. Deduplicate on <see cref="AlmediaBalanceChange.Id"/>.
+        /// </summary>
+        public static event Action<AlmediaBalanceChange> OnBalanceChanged
+        {
+            add => BalanceChangedBridge.Add(value);
+            remove => BalanceChangedBridge.Remove(value);
+        }
+
+        public static event Action<AlmediaError> OnErrorOccurred
+        {
+            add => ErrorBridge.Add(value);
+            remove => ErrorBridge.Remove(value);
+        }
 
         /// <summary>
         /// Fires when an SDK screen (linking webview, reward hub, offer) is now on top of the
@@ -73,7 +195,11 @@ namespace AlmediaLink
         /// link callbacks fire for it. Every emission is followed by exactly one matching
         /// <see cref="OnScreenDismissed"/>.
         /// </summary>
-        public static event Action<AlmediaScreen> OnScreenPresented;
+        public static event Action<AlmediaScreen> OnScreenPresented
+        {
+            add => PresentedBridge.Add(value);
+            remove => PresentedBridge.Remove(value);
+        }
 
         /// <summary>
         /// Fires when the screen reported by <see cref="OnScreenPresented"/> is gone - resume
@@ -83,20 +209,17 @@ namespace AlmediaLink
         /// for webview linking it fires before the outcome link callbacks
         /// (<see cref="OnLinkCompleted"/> etc.).
         /// </summary>
-        public static event Action<AlmediaScreen, InAppScreenResult> OnScreenDismissed;
+        public static event Action<AlmediaScreen, InAppScreenResult> OnScreenDismissed
+        {
+            add => DismissedBridge.Add(value);
+            remove => DismissedBridge.Remove(value);
+        }
 
         public static event Action<AlmediaLogLevel, string> OnLog
         {
-            add => AlmediaLog.OnLog += value;
-            remove => AlmediaLog.OnLog -= value;
+            add => LogBridge.Add(value);
+            remove => LogBridge.Remove(value);
         }
-
-        private static INativeBridge _bridge;
-        private static AlmediaStatus _almediaStatus = AlmediaStatus.NotInitialized;
-        private static AlmediaNotAvailableReason? _notAvailableReason;
-        private static AlmediaScreenAvailability _screenAvailability;
-        private static ResolvedAlmediaLinkConfig _activeConfig;
-        private static bool _pendingAutoInit;
 
         /// <summary>
         /// Boots the SDK with the given configuration and starts the status lifecycle.
@@ -113,86 +236,27 @@ namespace AlmediaLink
         /// </remarks>
         public static void Initialize(AlmediaLinkConfig config)
         {
-            config ??= new AlmediaLinkConfig();
-
-            AlmediaLog.Info($"Initializing SDK v{Version}");
-
-            var resolved = config.Resolve();
-
-            if (!resolved.IsValid)
-            {
-                AlmediaLog.Error("Integration key is missing. Cannot initialize.");
-                OnErrorOccurred?.Invoke(new AlmediaError(
-                    AlmediaErrorCode.InvalidConfiguration,
-                    "Integration key is missing."));
-                return;
-            }
-
-            // A repeat call with the same effective configuration is a no-op: leave the
-            // current status untouched. The native layer dedupes a same-config init without
-            // re-emitting a status, so resetting here would strand us at NotInitialized.
-            if (_activeConfig != null && _activeConfig.Equals(resolved))
-            {
-                AlmediaLog.Info("Already initialized with the same configuration; ignoring.");
-                return;
-            }
-
-            _almediaStatus = AlmediaStatus.NotInitialized;
-            _notAvailableReason = null;
-            _screenAvailability = default;
-
-            try
-            {
-                _bridge = NativeBridgeFactory.Create();
-            }
-            catch (PlatformNotSupportedException)
-            {
-                AlmediaLog.Error($"AlmediaLink is not supported on {Application.platform}. SDK will be inactive.");
-                OnErrorOccurred?.Invoke(new AlmediaError(
-                    AlmediaErrorCode.InvalidConfiguration,
-                    $"Platform {Application.platform} is not supported."));
-                return;
-            }
-            catch (Exception e)
-            {
-                AlmediaLog.Error($"Unexpected failure creating native bridge: {e.GetType().Name}: {e.Message}");
-                OnErrorOccurred?.Invoke(new AlmediaError(
-                    AlmediaErrorCode.Unexpected,
-                    $"Native bridge creation failed: {e.Message}"));
-                return;
-            }
-            
-            SubscribeToBridge();
-
-            var request = InitializeRequest.FromResolvedConfig(resolved);
-            var json = JsonUtility.ToJson(request);
-            _bridge.Initialize(json);
-
-            // Record only after a successful dispatch so a failed init (e.g. unsupported
-            // platform above) leaves the cache null and a retry is not wrongly swallowed.
-            _activeConfig = resolved;
-
-            AlmediaLinkUIManager.Initialize();
-
-            AlmediaLog.Info("SDK initialized. Waiting for native callback.");
+            EnsureWired();
+            NewApi.Initialize((config ?? new AlmediaLinkConfig()).ToNewApi());
         }
 
         // The LinkButton prefab's weak init: a no-op once the host has initialized,
         // and inert unless the settings asset explicitly opts in.
         internal static void InitializeIfNeeded()
         {
-            if (_activeConfig != null || _pendingAutoInit) return;
+            EnsureWired();
+            if (NewApi.IsInitialized || _pendingAutoInit) return;
 
             var settings = AlmediaLinkSettings.Load();
             if (settings == null || !settings.AutoInitializeFromPrefab) return;
 
             try
             {
-                NativeBridgeFactory.Create();
+                AlmediaSDK.Bridge.NativeBridgeFactory.Create();
             }
             catch (PlatformNotSupportedException)
             {
-                AlmediaLog.Warning($"AlmediaLink is not supported on {Application.platform}; the Link button stays hidden.");
+                AlmediaLog.Warning($"Almedia SDK is not supported on {Application.platform}; the Link button stays hidden.");
                 return;
             }
             catch (Exception e)
@@ -202,28 +266,35 @@ namespace AlmediaLink
             }
 
             _pendingAutoInit = true;
-            NativeBridgeFactory.Bridge.StartCoroutine(DeferredAutoInit());
+            AlmediaSDK.Bridge.NativeBridgeFactory.Bridge.StartCoroutine(DeferredAutoInit());
         }
 
         private static IEnumerator DeferredAutoInit()
         {
             yield return null;
             _pendingAutoInit = false;
-            if (_activeConfig != null) yield break;
+            if (NewApi.IsInitialized) yield break;
 
             AlmediaLog.Info("Initializing from a LinkButton prefab (no host Initialize call).");
             Initialize(new AlmediaLinkConfig());
         }
 
-        /// <summary>Opens the account-linking flow.</summary>
+        /// <summary>
+        /// Presents the link popup to a player who can link. The popup's button starts linking. The
+        /// popup comes from the Link Popup slot in Almedia > Settings, or from the deprecated
+        /// LinkPopupOverride while that slot is empty. If neither is assigned, linking starts directly.
+        /// </summary>
+        /// <remarks>
+        /// No-op (with a warning) until the SDK is ready. Does nothing, with a log, while
+        /// <see cref="CurrentStatus"/> is not <see cref="AlmediaStatus.Eligible"/> or a link popup is open.
+        /// </remarks>
+        public static void ShowLink() => NewApi.ShowLink();
+
+        /// <summary>Opens the account-linking flow directly, without the link popup.</summary>
         /// <remarks>No-op (with a warning) until the SDK is ready - the first
         /// <see cref="OnStatusChanged"/> must have fired.</remarks>
         public static void StartLinking(PlacementType placement = PlacementType.Popup)
-        {
-            if (!GuardReady()) return;
-            AlmediaLog.Info($"Starting link flow (placement: {placement})");
-            _bridge.StartLinking(placement);
-        }
+            => NewApi.StartLinking(Compat.ToNewApi(placement));
 
         /// <summary>Opens the reward progression screen in a webview.</summary>
         /// <remarks>
@@ -233,12 +304,7 @@ namespace AlmediaLink
         /// <see cref="OnScreenPresented"/> fires with <see cref="AlmediaScreen.RewardHub"/> and its
         /// dismissal is delivered via <see cref="OnScreenDismissed"/>.
         /// </remarks>
-        public static void ShowRewardHub()
-        {
-            if (!GuardReady()) return;
-            AlmediaLog.Info("Showing reward hub");
-            _bridge.ShowRewardHub();
-        }
+        public static void ShowRewardHub() => NewApi.ShowRewardHub();
 
         /// <summary>Opens the offer screen in a webview.</summary>
         /// <remarks>
@@ -249,12 +315,7 @@ namespace AlmediaLink
         /// <see cref="AlmediaScreen.Offer"/> and its dismissal is delivered via
         /// <see cref="OnScreenDismissed"/>.
         /// </remarks>
-        public static void ShowOffer()
-        {
-            if (!GuardReady()) return;
-            AlmediaLog.Info("Showing offer");
-            _bridge.ShowOffer();
-        }
+        public static void ShowOffer() => NewApi.ShowOffer();
 
         /// <summary>
         /// Context-aware entry point. Forwards to native, which routes on the player's state -
@@ -262,253 +323,60 @@ namespace AlmediaLink
         /// through <see cref="OnLog"/>) otherwise.
         /// </summary>
         /// <remarks>No-op (with a warning) until the SDK is ready.</remarks>
-        public static void Engage()
-        {
-            if (!GuardReady()) return;
-            AlmediaLog.Info("Engage requested");
-            _bridge.Engage();
-        }
+        public static void Engage() => NewApi.EngageCore();
 
         /// <summary>Issues a one-shot notification fetch.</summary>
         /// <remarks>No-op (with a warning) until the SDK is ready - the first
         /// <see cref="OnStatusChanged"/> must have fired.</remarks>
-        public static void FetchNotifications()
-        {
-            if (!GuardReady()) return;
-            _bridge.FetchNotifications();
-        }
+        public static void FetchNotifications() => NewApi.FetchNotifications();
 
         /// <summary>Resumes the notification polling loop.</summary>
         /// <remarks>No-op (with a warning) until the SDK is ready - the first
         /// <see cref="OnStatusChanged"/> must have fired.</remarks>
-        public static void StartNotificationPolling()
-        {
-            if (!GuardReady()) return;
-            _bridge.StartNotificationPolling();
-        }
+        public static void StartNotificationPolling() => NewApi.StartNotificationPolling();
 
-        public static void StopNotificationPolling()
-        {
-            if (!GuardInitialized()) return;
-            _bridge.StopNotificationPolling();
-        }
+        public static void StopNotificationPolling() => NewApi.StopNotificationPolling();
 
-        internal static void TrackPromoLoad(PromoState state)
-        {
-            if (!GuardInitialized()) return;
-            _bridge.TrackPromoLoad(state);
-        }
+        internal static void TrackPromoLoad(PromoState state) => NewApi.TrackPromoLoad(Compat.ToNewApi(state));
+        internal static void TrackPromoClick(PromoState state) => NewApi.TrackPromoClick(Compat.ToNewApi(state));
+        internal static void TrackPopupShow() => NewApi.TrackPopupShow();
+        internal static void TrackPopupDismiss() => NewApi.TrackPopupDismiss();
+        internal static void TrackPopupCtaClick() => NewApi.TrackPopupCtaClick();
+        internal static void TrackNotificationsShow(string notificationIdsJson) => NewApi.TrackNotificationsShow(notificationIdsJson);
+        internal static void TrackNotificationClick(string notificationId) => NewApi.TrackNotificationClick(notificationId);
 
-        internal static void TrackPromoClick(PromoState state)
-        {
-            if (!GuardInitialized()) return;
-            _bridge.TrackPromoClick(state);
-        }
-
-        internal static void TrackPopupShow()
-        {
-            if (!GuardInitialized()) return;
-            _bridge.TrackPopupShow();
-        }
-
-        internal static void TrackPopupDismiss()
-        {
-            if (!GuardInitialized()) return;
-            _bridge.TrackPopupDismiss();
-        }
-
-        internal static void TrackPopupCtaClick()
-        {
-            if (!GuardInitialized()) return;
-            _bridge.TrackPopupCtaClick();
-        }
-
-        internal static void TrackNotificationsShow(string notificationIdsJson)
-        {
-            if (!GuardInitialized()) return;
-            _bridge.TrackNotificationsShow(notificationIdsJson);
-        }
-
-        internal static void TrackNotificationClick(string notificationId)
-        {
-            if (!GuardInitialized()) return;
-            _bridge.TrackNotificationClick(notificationId);
-        }
+        private static bool _pendingAutoInit;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetOnDomainReload()
+        internal static void ResetOnDomainReload()
         {
-            OnStatusChanged = null;
-            OnScreenAvailabilityChanged = null;
-            OnLinkCompleted = null;
-            OnNotificationsReceived = null;
-            OnInGameRewardGrantRequested = null;
-            OnErrorOccurred = null;
-            OnScreenPresented = null;
-            OnScreenDismissed = null;
-            AlmediaLog.ClearSubscribers();
-            AlmediaLinkUIManager.Cleanup();
-            _bridge = null;
-            _almediaStatus = AlmediaStatus.NotInitialized;
-            _notAvailableReason = null;
-            _screenAvailability = default;
-            _activeConfig = null;
+            StatusBridge.Clear();
+            AvailabilityBridge.Clear();
+            LinkCompletedBridge.Clear();
+            NotificationsBridge.Clear();
+            GrantBridge.Clear();
+            ProgressBridge.Clear();
+            TaskCompletedBridge.Clear();
+            BalanceChangedBridge.Clear();
+            ErrorBridge.Clear();
+            PresentedBridge.Clear();
+            DismissedBridge.Clear();
+            LogBridge.Clear();
             _pendingAutoInit = false;
+            EnsureWired();
         }
 
-        private static void HandleStatusChanged(StatusChangedResponse response)
+        private static void EnsureWired()
         {
-            if (!StatusExtensions.TryFromString(response.status, out var status))
-                AlmediaLog.Warning($"Unrecognized status '{response.status}' from native; treating as NotInitialized.");
-
-            var reason = status == AlmediaStatus.NotAvailable
-                ? AlmediaNotAvailableReasonExtensions.FromWireString(response.reason)
-                : (AlmediaNotAvailableReason?)null;
-            var availability = status == AlmediaStatus.NotInitialized
-                ? default
-                : new AlmediaScreenAvailability(response.canShowRewardHub, response.canShowOffer);
-
-            bool statusOrReasonChanged = status != _almediaStatus || reason != _notAvailableReason;
-            bool availabilityChanged = availability != _screenAvailability;
-
-            // Every snapshot is current before any event fires - a handler for either event
-            // may read all three.
-            _almediaStatus = status;
-            _notAvailableReason = reason;
-            _screenAvailability = availability;
-
-            if (statusOrReasonChanged)
-            {
-                AlmediaLog.Info(reason == null
-                    ? $"Status changed: {_almediaStatus}"
-                    : $"Status changed: {_almediaStatus} (reason: {reason})");
-                
-                try
-                {
-                    OnStatusChanged?.Invoke(_almediaStatus);
-                }
-                catch (Exception e)
-                {
-                    AlmediaLog.Error($"OnStatusChanged handler threw: {e}");
-                }
-            }
-
-            if (availabilityChanged)
-            {
-                AlmediaLog.Info($"Screen availability changed: {availability}");
-
-                try
-                {
-                    OnScreenAvailabilityChanged?.Invoke(availability);
-                }
-                catch (Exception e)
-                {
-                    AlmediaLog.Error($"OnScreenAvailabilityChanged handler threw: {e}");
-                }
-            }
+            NewApi.Initialized -= AlmediaLinkUIManager.Initialize;
+            NewApi.Initialized += AlmediaLinkUIManager.Initialize;
+            NewApi.Shutdown -= AlmediaLinkUIManager.Cleanup;
+            NewApi.Shutdown += AlmediaLinkUIManager.Cleanup;
+            NewApi.LinkPopupPresenter = AlmediaLinkUIManager.ShowConfiguredLinkPopup;
+            AlmediaSDK.AlmediaConfig.DefaultsProvider = SettingsDefaults;
         }
 
-        private static void HandleLinkCompleted(LinkCompletedResponse response)
-        {
-            AlmediaLog.Info($"Link completed at {response.linkedAt}");
-            OnLinkCompleted?.Invoke(response.linkedAt);
-        }
-
-        private static void HandleNotificationsReceived(NotificationsReceivedResponse response)
-        {
-            if (response.notifications == null || response.notifications.Length == 0) return;
-            AlmediaLog.Debug($"Received {response.notifications.Length} notification(s)");
-            
-            var list = new List<AlmediaNotification>(response.notifications.Length);
-            
-            foreach (var item in response.notifications)
-            {
-                list.Add(AlmediaNotification.FromNotificationItem(item));
-            }
-            
-            OnNotificationsReceived?.Invoke(list);
-        }
-
-        private static void HandleInGameRewardGrantRequested(InGameRewardGrantResponse response)
-        {
-            if (string.IsNullOrEmpty(response.id))
-            {
-                AlmediaLog.Warning("Dropping in-game reward grant with no id.");
-                return;
-            }
-            if (response.rewards == null || response.rewards.Length == 0)
-            {
-                AlmediaLog.Warning($"Dropping in-game reward grant '{response.id}' with no rewards.");
-                return;
-            }
-            AlmediaLog.Info($"In-game reward grant received: {response.id} ({response.rewards.Length} reward(s))");
-            OnInGameRewardGrantRequested?.Invoke(AlmediaInGameRewardGrant.FromResponse(response));
-        }
-
-        private static void HandleErrorOccurred(ErrorCallbackResponse response)
-        {
-            AlmediaLog.Error($"Error from native: {response.code} - {response.message}");
-            OnErrorOccurred?.Invoke(AlmediaError.FromCallback(response));
-        }
-
-        private static void HandleScreenPresented(AlmediaScreen screen)
-        {
-            AlmediaLog.Info($"Screen presented: {screen}");
-            OnScreenPresented?.Invoke(screen);
-        }
-
-        private static void HandleScreenDismissed(AlmediaScreen screen, ScreenDismissedResponse response)
-        {
-            var result = InAppScreenResult.FromResponse(response);
-            AlmediaLog.Info($"Screen dismissed: {screen} ({result.Type})");
-            OnScreenDismissed?.Invoke(screen, result);
-        }
-
-        private static bool GuardInitialized()
-        {
-            if (_bridge == null)
-            {
-                AlmediaLog.Warning("SDK not initialized. Call Initialize() first.");
-                return false;
-            }
-            return true;
-        }
-
-        // Initialize is fire-and-forget: the bridge exists immediately, but the SDK is only
-        // usable once the first status callback arrives. Operations whose effect depends on a
-        // resolved status guard on this; native still enforces the status-specific rules.
-        private static bool GuardReady()
-        {
-            if (!GuardInitialized()) return false;
-            if (_almediaStatus == AlmediaStatus.NotInitialized)
-            {
-                AlmediaLog.Warning("SDK not ready yet. Wait for the first OnStatusChanged before calling SDK methods.");
-                return false;
-            }
-            return true;
-        }
-
-        private static void SubscribeToBridge()
-        {
-            UnsubscribeFromBridge();
-            AlmediaLinkBridge.StatusChanged += HandleStatusChanged;
-            AlmediaLinkBridge.LinkCompleted += HandleLinkCompleted;
-            AlmediaLinkBridge.NotificationsReceived += HandleNotificationsReceived;
-            AlmediaLinkBridge.InGameRewardGrantRequested += HandleInGameRewardGrantRequested;
-            AlmediaLinkBridge.ErrorOccurred += HandleErrorOccurred;
-            AlmediaLinkBridge.ScreenPresented += HandleScreenPresented;
-            AlmediaLinkBridge.ScreenDismissed += HandleScreenDismissed;
-        }
-
-        private static void UnsubscribeFromBridge()
-        {
-            AlmediaLinkBridge.StatusChanged -= HandleStatusChanged;
-            AlmediaLinkBridge.LinkCompleted -= HandleLinkCompleted;
-            AlmediaLinkBridge.NotificationsReceived -= HandleNotificationsReceived;
-            AlmediaLinkBridge.InGameRewardGrantRequested -= HandleInGameRewardGrantRequested;
-            AlmediaLinkBridge.ErrorOccurred -= HandleErrorOccurred;
-            AlmediaLinkBridge.ScreenPresented -= HandleScreenPresented;
-            AlmediaLinkBridge.ScreenDismissed -= HandleScreenDismissed;
-        }
+        private static AlmediaSDK.AlmediaConfigDefaults SettingsDefaults()
+            => AlmediaLinkSettings.ToDefaults(AlmediaLinkSettings.Load());
     }
 }

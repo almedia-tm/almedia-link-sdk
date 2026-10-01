@@ -53,6 +53,7 @@ namespace AlmediaLink.UI
 
             AlmediaLinkSDK.OnLinkCompleted += HandleLinkCompleted;
             AlmediaLinkSDK.OnErrorOccurred += HandleErrorOccurred;
+            AlmediaLinkSDK.OnStatusChanged += HandleStatusChanged;
 
             gameObject.SetActive(false);
         }
@@ -60,6 +61,7 @@ namespace AlmediaLink.UI
         private void OnEnable()
         {
             ApplySettings();
+            EventSystemCheck.WarnIfMissing(this, "LinkPopup");
         }
 
         private void OnDestroy()
@@ -73,6 +75,7 @@ namespace AlmediaLink.UI
 
             AlmediaLinkSDK.OnLinkCompleted -= HandleLinkCompleted;
             AlmediaLinkSDK.OnErrorOccurred -= HandleErrorOccurred;
+            AlmediaLinkSDK.OnStatusChanged -= HandleStatusChanged;
         }
 
         public void Show()
@@ -103,6 +106,12 @@ namespace AlmediaLink.UI
         {
             if (error == null || error.Code != AlmediaErrorCode.LinkingFailed) return;
             Close();
+        }
+
+        private void HandleStatusChanged(AlmediaStatus status)
+        {
+            if (status != AlmediaStatus.Eligible && gameObject.activeInHierarchy)
+                Close();
         }
 
         private void Close()

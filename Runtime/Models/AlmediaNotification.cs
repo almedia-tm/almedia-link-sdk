@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 
 namespace AlmediaLink.Models
 {
@@ -58,31 +57,24 @@ namespace AlmediaLink.Models
             ReceivedAt = ParseTimestamp(timestamp);
         }
 
+        internal AlmediaNotification(string id, string title, string message, string timestamp, DateTimeOffset? receivedAt, string display, string iconUrl)
+        {
+            Id = id;
+            Title = title;
+            Message = message;
+            Timestamp = timestamp;
+            Display = string.IsNullOrEmpty(display) ? "popup" : display;
+            IconUrl = string.IsNullOrEmpty(iconUrl) ? null : iconUrl;
+            ReceivedAt = receivedAt;
+        }
+
         [Obsolete("The type parameter now feeds Display. Use the (id, title, message, timestamp, display, iconUrl) constructor.")]
         public AlmediaNotification(string id, string title, string message, string timestamp, string type)
             : this(id, title, message, timestamp, type, null)
         {
         }
 
-        internal static AlmediaNotification FromNotificationItem(NotificationItem item)
-        {
-            return new AlmediaNotification(item.id, item.title, item.message, item.timestamp, item.type, item.iconUrl);
-        }
-
         internal static DateTimeOffset? ParseTimestamp(string timestamp)
-        {
-            if (string.IsNullOrEmpty(timestamp)) return null;
-
-            if (DateTimeOffset.TryParse(
-                    timestamp,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                    out var parsed))
-            {
-                return parsed;
-            }
-
-            return null;
-        }
+            => AlmediaSDK.AlmediaNotification.ParseTimestamp(timestamp);
     }
 }

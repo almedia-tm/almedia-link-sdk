@@ -11,7 +11,6 @@ namespace AlmediaLink.Editor
     [InitializeOnLoad]
     internal static class AlmediaLinkMigrations
     {
-        private const string SettingsPath = "Assets/AlmediaLink/Resources/AlmediaLinkSettings.asset";
         private const int CurrentVersion = 1;
 
         static AlmediaLinkMigrations()
@@ -22,7 +21,7 @@ namespace AlmediaLink.Editor
 
         private static void Run()
         {
-            var settings = AssetDatabase.LoadAssetAtPath<AlmediaLinkSettings>(SettingsPath);
+            var settings = AssetDatabase.LoadAssetAtPath<AlmediaLinkSettings>(AlmediaLinkBootstrap.SettingsAssetPath());
             if (settings == null) return; // not bootstrapped yet; next reload tries again
             if (settings._migrationVersion >= CurrentVersion) return;
 
@@ -52,7 +51,7 @@ namespace AlmediaLink.Editor
             if (prefab == null) return;
 
             var path = AssetDatabase.GetAssetPath(prefab);
-            if (string.IsNullOrEmpty(path) || path.StartsWith("Packages/com.almedia.link"))
+            if (string.IsNullOrEmpty(path) || path.StartsWith(AlmediaSDK.AlmediaPackage.Root))
                 return; // bundled default - keeps receiving settings theming, as in 1.x
 
             untick(prefab);

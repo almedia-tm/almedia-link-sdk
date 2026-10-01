@@ -1,6 +1,51 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.0] - 2026-09-30
+
+### Introducing: Almedia SDK
+The SDK is now also published as `com.almedia.sdk`, shown as Almedia SDK in the Package Manager, from `https://github.com/almedia-tm/almedia-sdk.git`. This package, `com.almedia.link`, ships the same 1.3.0. Future releases are published as `com.almedia.sdk` only.
+
+To move, replace the `com.almedia.link` line in `Packages/manifest.json` with `"com.almedia.sdk": "https://github.com/almedia-tm/almedia-sdk.git"`. Never install both packages. Every asset keeps its GUID, so scenes, Prefab Variants and settings references resolve as before.
+
+On the first editor load after the upgrade, the settings asset moves from `Assets/AlmediaLink/Resources/AlmediaLinkSettings.asset` to `Assets/Almedia/Resources/AlmediaSettings.asset`, and the empty `Assets/AlmediaLink` folder is removed. The SDK finds the moved asset by itself. If your own code loads the asset with `Resources.Load("AlmediaLinkSettings")`, change that call to `AlmediaLinkSettings.Load()`. An asset that cannot be moved stays where it is and keeps working.
+
+The SDK's API is now `Almedia`, in the `AlmediaSDK` namespace and assembly, with `AlmediaConfig` for configuration. Every public type starts with `Almedia`, so none collides with a type in your game or in another SDK.
+- `Almedia.Status` holds the player's status as one object, and `Almedia.OnStatusChanged` fires on every change. `Linked` carries `CanShowRewardHub` and `CanShowOffer`. `NotAvailable` carries the reason. See [Status and lifecycle](./Documentation~/integration-guide.md#status-and-lifecycle).
+- Error codes, screens, log levels and the other value sets are classes, not enums. Compare them with `==`.
+- `Almedia` has no `Engage()`. Use `ShowLink()` and `ShowRewardHub()`.
+- `AlmediaEditorMock` drives `Almedia` in the editor.
+
+Existing integrations need no code changes. Code that uses `AlmediaLinkSDK`, `AlmediaLinkConfig` and `AlmediaLink.Models` compiles and behaves as before, and assembly definitions that reference `AlmediaLink` still resolve. The [migration guide](./Documentation~/migration-guide.md) shows how to move code to `Almedia`, and the [AlmediaLink API reference](./Documentation~/almedialink-api-reference.md) documents the existing API. Everything under Added works with both APIs.
+
+### Added
+- Player progress. `Almedia.Progress` holds a linked player's progress in your game: balance, lifetime earnings, pending, completed and expired tasks, and username. It is `null` when there is no progress to show. `OnProgressUpdated` fires on every change. `OnTaskCompleted` and `OnBalanceChanged` report completed tasks and balance changes. Render your UI from `Progress` and use the events for celebrations. The events can repeat, so deduplicate on their `Id`. The editor mocks can emit all three. See [Progress and rewards](./Documentation~/integration-guide.md#progress-and-rewards).
+  - Every amount in `Progress`, `OnTaskCompleted` and `OnBalanceChanged` is an `AlmediaRewardPoints`: coins, plus `AlmediaMoney` in the player's currency and in USD. `AlmediaMoney.Amount` is an exact `decimal`, and the SDK does not format it. The supported player currencies are USD, EUR, GBP, CAD, AUD, PLN, CHF, KRW, JPY and SEK. Any other currency shows as its USD value.
+- Tasks whose reward decreases over time. `AlmediaTask.RewardDropsAt` is the time of the next decrease, for a countdown. `AlmediaCompletedTask.ActualReward` is the reward paid at completion. `AlmediaTaskKind` lists the known task kinds. Show an unknown kind as `Main`.
+- `ShowLink()` shows the link popup to a player who can link, and the popup's button starts linking. It does nothing for other players. The popup comes from the new **Link Popup** slot in **Almedia → Settings → Default UI Prefabs**. New projects get the bundled popup there. An existing settings asset keeps the slot empty, so the build does not grow. Until you assign a popup, `ShowLink()` uses the deprecated `LinkPopupOverride` or starts linking directly. A popup in the slot is included in every build.
+- `DisabledFeatures` in the config, and **Disabled Features** in **Almedia → Settings**. Declare the parts of the experience your game hides: linking, the reward hub, the offer screen or notifications. The backend then stops offering them, and our reporting can tell a deliberate rollout from a broken integration. The settings apply to every player, and code can add to them for the current player. A player whose linking you hide reads `NotAvailable` with the reason `Disabled`.
+- `TrafficSource` and `Meta1` to `Meta4` in the config. They add your acquisition source, for example `applovin_int`, and up to four values of your own to the linking URL, for your S2S reporting. Each value is limited to 250 UTF-8 bytes.
+- Players who have the Freecash app can link in the app instead of a web screen, so they do not log in again (iOS and Android). The backend decides where this applies. Control returns to the game at once, and the status updates when the game comes back to the foreground. As with linking in the browser, no screen events fire.
+- Where Almedia enables it for your integration, linking, the reward hub and offers work on devices without an advertising ID. The SDK then creates an install ID and stores it on the device.
+- When the Adjust or AppsFlyer SDK is in your app and Almedia enables it for your integration, the SDK reads their device ID itself. You no longer need to pass `AdjustDeviceId` or `AppsFlyerId`. A value you pass still wins.
+- A reward earned in the reward hub or offer screen can now reach the game right away, without waiting for the next poll.
+- The bundled UI prefabs log a warning through `OnLog` when they are shown in a scene without an active `EventSystem`. They need one to receive taps.
+
+### Changed
+- The backend can now set how often the SDK polls for messages, and hold a request for up to a minute until a message arrives. Your polling interval applies when the backend sets none. A `FetchNotifications()` result can therefore take up to about a minute.
+- `OnErrorOccurred` no longer fires when the connection drops during the SDK's own background work: notification polling, event delivery and status refreshes. The SDK retries that work and logs the failure at `Warning`. Failures of calls your game makes, such as `Initialize` or opening a screen, still fire it. `Error` logs and `OnErrorOccurred` are now safe to send to a crash reporter.
+- An event handler that throws no longer stops the other handlers of that event, or later SDK callbacks. The exception is logged through `OnLog` at `Error`.
+- A link popup that fails to open, for example a Prefab Variant with a missing reference, is removed and logged at `Error`. It no longer throws out of the `LinkButton` tap or the `ShowLink()` call.
+
+### Fixed
+- Fixed the link popup staying open after the player could no longer link, for example after linking on another device.
+- Fixed lost callbacks when a GameObject in your game had the same name as the SDK's callback receiver. The SDK then never left `NotInitialized`. The receiver is now named `[Almedia SDK] Bridge`, which is reserved, and `Initialize` logs an error naming any other object with that name.
+- Fixed an SDK screen on iOS breaking when your game showed its own full-screen view over it, such as a login or paywall. The SDK no longer closes your view, and its screen stays open underneath with a working close button.
+- Fixed crashes on Android when a link in an SDK web screen could not be opened, and when the game moved on while the SDK still had a request in flight.
+- Fixed frame hitches on Android when the player opens the SDK's UI, and the SDK staying unavailable for a session after a failed file write.
+- Fixed delays on Android with a weak connection, when returning to the game after linking in the browser and when opening an SDK screen.
+- Fixed a rare case on Android where the game missed a status change, including `OnLinkCompleted` after linking in the browser.
+- Fixed Android collecting the advertising ID after the player opted out of ad tracking, when saving the opt-out failed.
+- Fixed buttons in the SDK's web screens doing nothing on Android in apps minified without Android's default ProGuard file.
 
 ## [1.2.1] - 2026-09-17
 

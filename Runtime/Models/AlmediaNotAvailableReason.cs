@@ -1,4 +1,4 @@
-﻿namespace AlmediaLink.Models
+namespace AlmediaLink.Models
 {
     /// <summary>
     /// Why the SDK is <see cref="AlmediaStatus.NotAvailable"/> for this player. Read the current
@@ -12,18 +12,9 @@
         Unknown,
 
         /// <summary>The player is in the holdout (control) group.</summary>
-        Holdout
-    }
+        Holdout,
 
-    internal static class AlmediaNotAvailableReasonExtensions
-    {
-        internal static AlmediaNotAvailableReason FromWireString(string value)
-        {
-            switch (value)
-            {
-                case "holdout": return AlmediaNotAvailableReason.Holdout;
-                default: return AlmediaNotAvailableReason.Unknown;
-            }
-        }
+        /// <summary>The game declared linking in its disabled features.</summary>
+        Disabled
     }
 }

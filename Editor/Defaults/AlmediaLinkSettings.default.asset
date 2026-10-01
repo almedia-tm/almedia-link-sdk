@@ -30,4 +30,5 @@ MonoBehaviour:
   _notificationBackgroundColor: {r: 0.07058824, g: 0.07058824, b: 0.07058824, a: 1}
   _notificationCardPrefab: {fileID: 7900280168532762302, guid: afcaaf1a98025d44db6df97151b567d1, type: 3}
   _activityOverlayPrefab: {fileID: 2784621432374350182, guid: d617bfc66976869488c4b38c88d611df, type: 3}
+  _linkPopupPrefab: {fileID: 109903986789150082, guid: 81608c9266bd316458e505fd550024e9, type: 3}
   _migrationVersion: 1

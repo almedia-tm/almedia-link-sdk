@@ -1,0 +1,32 @@
+apply plugin: 'com.android.library'
+
+def unityProp = { String key, fallback ->
+    project.hasProperty(key) ? project.property(key) : fallback
+}
+def compileSdkLevel = unityProp('unity.compileSdkVersion', '34').toString() as int
+def buildTools      = unityProp('unity.buildToolsVersion', '34.0.0').toString()
+
+android {
+    namespace 'co.almedia.sdk.androidlib'   // required by AGP 8+; supported since AGP 7.0
+    compileSdk compileSdkLevel
+    buildToolsVersion buildTools
+
+    defaultConfig {
+        minSdk 23
+    }
+
+    // This .androidlib is flat (manifest at the folder root, not src/main/), point AGP at it.
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+        }
+    }
+}
+
+dependencies {
+    // Coroutines/serialization pinned to their last Kotlin 1.8 builds: newer releases
+    // carry Kotlin >= 1.9 metadata that crashes D8 on AGP 7.x when desugaring for minSdk < 24
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1'
+}

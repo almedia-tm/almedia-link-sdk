@@ -42,13 +42,12 @@ namespace AlmediaLink.Models
             Rewards = (AlmediaInGameReward[])rewards.Clone();
         }
 
-        internal static AlmediaInGameRewardGrant FromResponse(InGameRewardGrantResponse response)
+        internal AlmediaInGameRewardGrant(string id, string timestamp, DateTimeOffset? receivedAt, AlmediaInGameReward[] rewards)
         {
-            var items = response.rewards ?? Array.Empty<InGameRewardItem>();
-            var rewards = new AlmediaInGameReward[items.Length];
-            for (int i = 0; i < items.Length; i++)
-                rewards[i] = new AlmediaInGameReward(items[i].amount, items[i].code);
-            return new AlmediaInGameRewardGrant(response.id, response.timestamp, rewards);
+            Id = id;
+            Timestamp = timestamp;
+            ReceivedAt = receivedAt;
+            Rewards = rewards;
         }
     }
 

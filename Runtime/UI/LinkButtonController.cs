@@ -76,6 +76,11 @@ namespace AlmediaLink.UI
                 Refresh();
         }
 
+        private void OnEnable()
+        {
+            EventSystemCheck.WarnIfMissing(this, "LinkButton");
+        }
+
         private void OnDestroy()
         {
             _eligible.Unsubscribe(OnButtonClicked);

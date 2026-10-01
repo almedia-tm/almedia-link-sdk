@@ -1,9 +1,12 @@
+using System.Collections.Generic;
+using AlmediaLink.Models;
+
 namespace AlmediaLink
 {
     /// <summary>
-    /// Runtime configuration for the Almedia Link SDK.
-    /// Set properties before calling AlmediaLinkSDK.Initialize().
+    /// Runtime configuration for <see cref="AlmediaLinkSDK.Initialize"/>.
     /// Values set here override the corresponding AlmediaLinkSettings (ScriptableObject) defaults.
+    /// New integrations use <see cref="AlmediaSDK.AlmediaConfig"/>.
     /// </summary>
     public class AlmediaLinkConfig
     {
@@ -61,62 +64,68 @@ namespace AlmediaLink
         public string AccountId { get; set; }
 
         /// <summary>
+        /// Where the user was acquired, sent as <c>sub3</c> on the linking magic link only.
+        /// Pass your MMP's media source verbatim, e.g. <c>applovin_int</c> or
+        /// <c>googleadwords_int</c>. Runtime-only, no ScriptableObject fallback.
+        /// Max 250 UTF-8 bytes; a longer value is left off the link and named in a warning.
+        /// </summary>
+        public string TrafficSource { get; set; }
+
+        /// <summary>
+        /// Opaque publisher payload appended to the linking magic link only, for your own
+        /// S2S reporting. Runtime-only, no ScriptableObject fallback. The SDK never reads it.
+        /// Max 250 UTF-8 bytes; a longer value is left off the link and named in a warning.
+        /// </summary>
+        public string Meta1 { get; set; }
+
+        /// <summary>See <see cref="Meta1"/>.</summary>
+        public string Meta2 { get; set; }
+
+        /// <summary>See <see cref="Meta1"/>.</summary>
+        public string Meta3 { get; set; }
+
+        /// <summary>See <see cref="Meta1"/>.</summary>
+        public string Meta4 { get; set; }
+
+        /// <summary>
         /// Notification polling interval in seconds.
         /// If null, falls back to AlmediaLinkSettings.NotificationPollIntervalSeconds (default 30).
         /// </summary>
         public int? NotificationsPollingIntervalSec { get; set; }
 
         /// <summary>
-        /// Resolves this config against the ScriptableObject defaults loaded from Resources.
+        /// Parts of the Link experience this game hides from the current player. Never null;
+        /// declare it with a collection initializer: <c>DisabledFeatures = { AlmediaFeature.Offer }</c>.
+        /// Joined with the settings asset's set: the asset is the floor for every player, code
+        /// adds for this one and cannot remove. Declared at initialization only; changing it
+        /// re-initializes. The backend enforces the set, the SDK reacts to the status it returns.
         /// </summary>
-        internal ResolvedAlmediaLinkConfig Resolve()
+        public HashSet<AlmediaFeature> DisabledFeatures { get; } = new HashSet<AlmediaFeature>();
+
+        internal AlmediaSDK.AlmediaConfig ToNewApi()
         {
-            return Resolve(AlmediaLinkSettings.Load());
-        }
-
-        /// <summary>
-        /// Resolves this config against the provided settings.
-        /// Code-supplied values take precedence over ScriptableObject defaults.
-        /// Platform selection picks the correct key for the current build target.
-        /// </summary>
-        internal ResolvedAlmediaLinkConfig Resolve(AlmediaLinkSettings settings)
-        {
-            var result = new ResolvedAlmediaLinkConfig();
-
-            string configKey;
-            string settingsKey;
-
-#if UNITY_IOS
-            configKey = IosIntegrationKey;
-            settingsKey = settings?.IosIntegrationKey;
-#elif UNITY_ANDROID
-            configKey = AndroidIntegrationKey;
-            settingsKey = settings?.AndroidIntegrationKey;
-#else
-            configKey = !string.IsNullOrEmpty(IosIntegrationKey) ? IosIntegrationKey : AndroidIntegrationKey;
-            settingsKey = !string.IsNullOrEmpty(settings?.IosIntegrationKey)
-                ? settings.IosIntegrationKey
-                : settings?.AndroidIntegrationKey;
-#endif
-
-            result.IntegrationKey = !string.IsNullOrEmpty(configKey) ? configKey : settingsKey;
-
-            result.NotificationsPollingIntervalSec = NotificationsPollingIntervalSec
-                ?? settings?.NotificationPollIntervalSeconds
-                ?? AlmediaLinkSettings.DefaultPollInterval;
-            
-            result.Gaid = Gaid;
-            result.Asid = Asid;
-            result.Oaid = Oaid;
-            result.Idfa = Idfa;
-            result.Idfv = Idfv;
-            result.AdjustDeviceId = AdjustDeviceId;
-            result.AppsFlyerId = AppsFlyerId;
-            result.AccountId = AccountId;
-
-            result.IsValid = !string.IsNullOrEmpty(result.IntegrationKey);
-
-            return result;
+            var config = new AlmediaSDK.AlmediaConfig
+            {
+                IosIntegrationKey = IosIntegrationKey,
+                AndroidIntegrationKey = AndroidIntegrationKey,
+                Gaid = Gaid,
+                Asid = Asid,
+                Oaid = Oaid,
+                Idfa = Idfa,
+                Idfv = Idfv,
+                AdjustDeviceId = AdjustDeviceId,
+                AppsFlyerId = AppsFlyerId,
+                AccountId = AccountId,
+                TrafficSource = TrafficSource,
+                Meta1 = Meta1,
+                Meta2 = Meta2,
+                Meta3 = Meta3,
+                Meta4 = Meta4,
+                NotificationsPollingIntervalSec = NotificationsPollingIntervalSec
+            };
+            foreach (var feature in DisabledFeatures)
+                config.DisabledFeatures.Add(Compat.ToNewApi(feature));
+            return config;
         }
     }
 }

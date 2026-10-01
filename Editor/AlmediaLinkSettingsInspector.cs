@@ -21,6 +21,10 @@ namespace AlmediaLink.Editor
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_autoInitializeFromPrefab"), "Auto-Initialize From Prefabs");
 
             GUILayout.Space(8);
+            EditorGUILayout.LabelField("Disabled Features", EditorStyles.boldLabel);
+            AlmediaLinkSettingsEditor.DrawFeatureToggles(serializedObject.FindProperty("_disabledFeatures"));
+
+            GUILayout.Space(8);
             EditorGUILayout.LabelField("Link Popup Text", EditorStyles.boldLabel);
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_popupTitle"), "Popup Title");
             GUILayout.Space(2);
@@ -45,10 +49,13 @@ namespace AlmediaLink.Editor
 
             GUILayout.Space(8);
             EditorGUILayout.LabelField("Default UI Prefabs", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(AlmediaLinkSettingsEditor.LinkPopupHelp, MessageType.Info);
+            AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_linkPopupPrefab"), "Link Popup");
+            GUILayout.Space(4);
             EditorGUILayout.HelpBox(
                 "The notification UI the SDK spawns when the default UI is enabled. Assign Prefab " +
                 "Variants to customize; disabling the toggle clears these so the prefabs stay out of " +
-                "your build. The Link Popup is configured on the LinkButton prefab itself.",
+                "your build.",
                 MessageType.Info);
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_notificationCardPrefab"), "Notification Card");
             AlmediaLinkSettingsEditor.DrawField(serializedObject.FindProperty("_activityOverlayPrefab"), "Activity Overlay");

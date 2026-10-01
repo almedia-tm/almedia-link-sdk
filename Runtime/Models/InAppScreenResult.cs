@@ -32,29 +32,5 @@ namespace AlmediaLink.Models
             Type = type;
             Error = error;
         }
-
-        // Maps the native wire payload to the public result. The result STRING is the sole
-        // discriminator - never `error != null`. JsonUtility cannot represent a null nested
-        // object: a non-failed payload deserializes `error` to a default-constructed instance
-        // (empty code/message), not null, so keying off the field would misclassify every
-        // completed/cancelled dismissal as a failure. See ScreenDismissedResponse.
-        internal static InAppScreenResult FromResponse(ScreenDismissedResponse response)
-        {
-            switch (response.result)
-            {
-                case "completed":
-                    return new InAppScreenResult(InAppScreenResultType.Completed);
-                case "cancelled":
-                    return new InAppScreenResult(InAppScreenResultType.Cancelled);
-                case "failed":
-                    var error = response.error != null
-                        ? AlmediaError.FromCallback(response.error)
-                        : new AlmediaError(AlmediaErrorCode.Unknown, "In-app screen failed to load.");
-                    return new InAppScreenResult(InAppScreenResultType.Failed, error);
-                default:
-                    AlmediaLog.Warning($"Unrecognized in-app screen result '{response.result}'; treating as cancelled.");
-                    return new InAppScreenResult(InAppScreenResultType.Cancelled);
-            }
-        }
     }
 }

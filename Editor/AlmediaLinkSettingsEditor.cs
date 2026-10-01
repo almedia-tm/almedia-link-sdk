@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -6,7 +7,6 @@ namespace AlmediaLink.Editor
 {
     public class AlmediaLinkSettingsEditor : EditorWindow
     {
-        private const string AssetPath = "Assets/AlmediaLink/Resources/AlmediaLinkSettings.asset";
         private const string PrefPrefix = "com.almedialink.";
 
         private SerializedObject _serializedObject;
@@ -24,6 +24,7 @@ namespace AlmediaLink.Editor
         private SerializedProperty _notificationPollIntervalSeconds;
         private SerializedProperty _enableDefaultNotificationUI;
         private SerializedProperty _autoInitializeFromPrefab;
+        private SerializedProperty _disabledFeatures;
 
         // UI Text
         private SerializedProperty _popupTitle;
@@ -41,13 +42,18 @@ namespace AlmediaLink.Editor
         private SerializedProperty _notificationBackgroundColor;
 
         // Default UI Prefabs
+        private SerializedProperty _linkPopupPrefab;
         private SerializedProperty _notificationCardPrefab;
         private SerializedProperty _activityOverlayPrefab;
+
+        internal const string LinkPopupHelp =
+            "The popup ShowLink() presents. A LinkButton opens the popup assigned on the button itself. " +
+            "A popup assigned here ships in every build. Clear it if you never call ShowLink().";
 
         [MenuItem("Almedia/Settings")]
         public static void ShowWindow()
         {
-            var window = GetWindow<AlmediaLinkSettingsEditor>(true, "Almedia Link SDK");
+            var window = GetWindow<AlmediaLinkSettingsEditor>(true, "Almedia SDK");
             window.minSize = new Vector2(500, 450);
             window.Show();
         }
@@ -108,6 +114,7 @@ namespace AlmediaLink.Editor
             _notificationPollIntervalSeconds = _serializedObject.FindProperty("_notificationPollIntervalSeconds");
             _enableDefaultNotificationUI = _serializedObject.FindProperty("_enableDefaultNotificationUI");
             _autoInitializeFromPrefab = _serializedObject.FindProperty("_autoInitializeFromPrefab");
+            _disabledFeatures = _serializedObject.FindProperty("_disabledFeatures");
 
             _popupTitle = _serializedObject.FindProperty("_popupTitle");
             _benefit1Title = _serializedObject.FindProperty("_benefit1Title");
@@ -122,6 +129,7 @@ namespace AlmediaLink.Editor
 
             _notificationBackgroundColor = _serializedObject.FindProperty("_notificationBackgroundColor");
 
+            _linkPopupPrefab = _serializedObject.FindProperty("_linkPopupPrefab");
             _notificationCardPrefab = _serializedObject.FindProperty("_notificationCardPrefab");
             _activityOverlayPrefab = _serializedObject.FindProperty("_activityOverlayPrefab");
         }
@@ -144,12 +152,14 @@ namespace AlmediaLink.Editor
 
             // Header
             GUILayout.Space(8);
-            EditorGUILayout.LabelField("Almedia Link SDK", _titleStyle);
+            EditorGUILayout.LabelField("Almedia SDK", _titleStyle);
             EditorGUILayout.LabelField($"v{AlmediaLinkSDK.Version}", EditorStyles.miniLabel);
             GUILayout.Space(8);
 
             // Sections
             DrawStaticSection("SDK Configuration", DrawSDKConfiguration);
+            GUILayout.Space(4);
+            DrawCollapsibleSection("show_disabled_features", "Disabled Features", DrawDisabledFeatures);
             GUILayout.Space(4);
             DrawCollapsibleSection("show_ui_text", "Link Popup Text", DrawUIText);
             GUILayout.Space(4);
@@ -184,6 +194,14 @@ namespace AlmediaLink.Editor
             EditorGUIUtility.labelWidth = prevLabelWidth;
         }
 
+        private void DrawDisabledFeatures()
+        {
+            var prevLabelWidth = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = 220;
+            DrawFeatureToggles(_disabledFeatures);
+            EditorGUIUtility.labelWidth = prevLabelWidth;
+        }
+
         private void DrawUIText()
         {
             DrawField(_popupTitle, "Popup Title");
@@ -212,12 +230,14 @@ namespace AlmediaLink.Editor
 
         private void DrawDefaultUIPrefabs()
         {
+            EditorGUILayout.HelpBox(LinkPopupHelp, MessageType.Info);
+            DrawField(_linkPopupPrefab, "Link Popup");
+            GUILayout.Space(6);
             EditorGUILayout.HelpBox(
                 "The notification UI the SDK spawns when 'Enable Default Notification UI' is on. " +
                 "Assign Prefab Variants to customize; variants automatically receive SDK updates for " +
                 "non-overridden properties. Disabling the toggle clears these references so the prefabs " +
-                "(and their art) stay out of your build; re-enabling restores the bundled defaults. " +
-                "The Link Popup is configured on the LinkButton prefab itself, not here.",
+                "(and their art) stay out of your build; re-enabling restores the bundled defaults.",
                 MessageType.Info);
             DrawField(_notificationCardPrefab, "Notification Card");
             DrawField(_activityOverlayPrefab, "Activity Overlay");
@@ -305,6 +325,61 @@ namespace AlmediaLink.Editor
             }
         }
 
+        /// <summary>
+        /// One toggle per <see cref="AlmediaSDK.AlmediaFeature"/> the SDK knows, over the
+        /// serialized list of wire names, so a new feature shows up without editor work.
+        /// </summary>
+        internal static void DrawFeatureToggles(SerializedProperty names)
+        {
+            EditorGUILayout.HelpBox(
+                "Parts of the Link experience this game hides from every player. Permanent choices " +
+                "go here; per-player rollouts and A/B tests are driven from code, which adds to this " +
+                "set and never removes from it. The backend enforces the set.",
+                MessageType.Info);
+
+            foreach (var feature in AlmediaSDK.AlmediaFeature.All)
+            {
+                int index = IndexOf(names, feature.WireName);
+                var content = new GUIContent(DisplayName(feature.WireName), FeatureTooltip(feature));
+                bool disabled = EditorGUILayout.Toggle(content, index >= 0);
+
+                if (disabled && index < 0)
+                {
+                    names.arraySize++;
+                    names.GetArrayElementAtIndex(names.arraySize - 1).stringValue = feature.WireName;
+                }
+                else if (!disabled && index >= 0)
+                {
+                    names.DeleteArrayElementAtIndex(index);
+                }
+            }
+        }
+
+        private static int IndexOf(SerializedProperty names, string wireName)
+        {
+            for (int i = 0; i < names.arraySize; i++)
+                if (names.GetArrayElementAtIndex(i).stringValue == wireName) return i;
+            return -1;
+        }
+
+        // "reward_hub" -> "Reward Hub"
+        private static string DisplayName(string wireName)
+            => string.Join(" ", wireName.Split('_').Select(w => char.ToUpperInvariant(w[0]) + w.Substring(1)));
+
+        private static string FeatureTooltip(AlmediaSDK.AlmediaFeature feature)
+        {
+            if (feature == AlmediaSDK.AlmediaFeature.Linking)
+                return "Hide the linking entry point. A player who already linked keeps everything.";
+            if (feature == AlmediaSDK.AlmediaFeature.RewardHub)
+                return "Hide the reward hub screen. ShowRewardHub() becomes a no-op.";
+            if (feature == AlmediaSDK.AlmediaFeature.Offer)
+                return "Hide the offer screen. ShowOffer() becomes a no-op.";
+            if (feature == AlmediaSDK.AlmediaFeature.Notifications)
+                return "The player gets no Almedia notifications at all, in any UI. " +
+                       "Enable Default Notification UI only decides whose UI renders them.";
+            return null;
+        }
+
         internal static void DrawTextArea(SerializedProperty prop, string label)
         {
             EditorGUILayout.BeginHorizontal();
@@ -337,23 +412,29 @@ namespace AlmediaLink.Editor
             // Idempotent - copies from package defaults if the host-side asset is missing.
             AlmediaLinkBootstrap.EnsureSettings();
 
-            var asset = AssetDatabase.LoadAssetAtPath<AlmediaLinkSettings>(AssetPath);
+            string path = AlmediaLinkBootstrap.SettingsAssetPath();
+            var asset = AssetDatabase.LoadAssetAtPath<AlmediaLinkSettings>(path);
             if (asset != null) return asset;
+            if (System.IO.File.Exists(path))
+            {
+                Debug.LogWarning($"[Almedia] {path} exists but does not load as settings; leaving it untouched.");
+                return null;
+            }
 
             // Last-resort fallback: package defaults missing too. Create an empty asset
             // so the editor window still renders. Should not happen in normal installs.
             asset = ScriptableObject.CreateInstance<AlmediaLinkSettings>();
 
-            var dir = System.IO.Path.GetDirectoryName(AssetPath);
+            var dir = System.IO.Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir) && !AssetDatabase.IsValidFolder(dir))
             {
                 System.IO.Directory.CreateDirectory(dir);
                 AssetDatabase.Refresh();
             }
 
-            AssetDatabase.CreateAsset(asset, AssetPath);
+            AssetDatabase.CreateAsset(asset, path);
             AssetDatabase.SaveAssets();
-            Debug.LogWarning($"[AlmediaLink] Package defaults missing - created empty settings asset at {AssetPath}");
+            Debug.LogWarning($"[AlmediaLink] Package defaults missing - created empty settings asset at {path}");
             return asset;
         }
 

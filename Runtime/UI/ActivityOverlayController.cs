@@ -44,6 +44,7 @@ namespace AlmediaLink.UI
         private void OnEnable()
         {
             ApplySettings();
+            EventSystemCheck.WarnIfMissing(this, "ActivityOverlay");
         }
 
         private void OnDestroy()

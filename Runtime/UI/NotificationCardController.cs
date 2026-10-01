@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using AlmediaLink.Models;
+using TrackNotificationsShowRequest = AlmediaSDK.TrackNotificationsShowRequest;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -64,6 +65,7 @@ namespace AlmediaLink.UI
         private void OnEnable()
         {
             ApplySettings();
+            EventSystemCheck.WarnIfMissing(this, "NotificationCard");
         }
 
         private void OnDestroy()

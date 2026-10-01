@@ -14,6 +14,8 @@ namespace AlmediaLink.UI
         private static List<AlmediaNotification> _lastNotifications;
         private static bool _initialized;
         private static readonly HashSet<string> _missingPrefabsLogged = new HashSet<string>();
+        private static LinkPopupController _openPopup;
+        private static bool _missingLinkPopupWarned;
 
         internal static void Initialize()
         {
@@ -26,10 +28,53 @@ namespace AlmediaLink.UI
         internal static void ShowLinkPopup(LinkPopupController prefab)
         {
             if (prefab == null) return; // the caller owns the fallback and the warning
+            if (PopupAlreadyOpen()) return;
 
-            var instance = Object.Instantiate(prefab);
-            Object.DontDestroyOnLoad(instance.gameObject);
-            instance.Show();
+            _openPopup = Object.Instantiate(prefab);
+            Object.DontDestroyOnLoad(_openPopup.gameObject);
+            try
+            {
+                _openPopup.Show();
+            }
+            catch (System.Exception e)
+            {
+                _openPopup.gameObject.SetActive(false);
+                Object.Destroy(_openPopup.gameObject);
+                _openPopup = null;
+                AlmediaLog.Error($"Link popup '{prefab.name}' failed to open: {e.GetType().Name}: {e.Message}");
+            }
+        }
+
+        internal static void ShowConfiguredLinkPopup()
+        {
+            if (PopupAlreadyOpen()) return;
+
+            var settings = AlmediaLinkSettings.Load();
+            LinkPopupController popup = null;
+            if (settings != null)
+                popup = settings.LinkPopupPrefab != null ? settings.LinkPopupPrefab : settings.LegacyLinkPopupOverride;
+
+            if (popup != null)
+            {
+                ShowLinkPopup(popup);
+                return;
+            }
+
+            if (!_missingLinkPopupWarned)
+            {
+                _missingLinkPopupWarned = true;
+                AlmediaLog.Warning(
+                    "ShowLink: no Link Popup assigned in Almedia > Settings; linking starts directly. " +
+                    "Assign the Link Popup there to show the popup first.");
+            }
+            AlmediaLinkSDK.StartLinking(PlacementType.Popup);
+        }
+
+        private static bool PopupAlreadyOpen()
+        {
+            if (_openPopup == null || !_openPopup.gameObject.activeSelf) return false;
+            AlmediaLog.Debug("A link popup is already open.");
+            return true;
         }
 
         internal static void Cleanup()
@@ -39,6 +84,7 @@ namespace AlmediaLink.UI
             _initialized = false;
             _lastNotifications = null;
             _missingPrefabsLogged.Clear();
+            _missingLinkPopupWarned = false;
 
             if (_notificationCard != null)
             {

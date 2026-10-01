@@ -1,12 +1,14 @@
 ﻿using System;
-using AlmediaLink.Bridge;
+using System.Globalization;
+using AlmediaSDK.Bridge;
 using AlmediaLink.Models;
+using NewModels = AlmediaSDK;
 
 namespace AlmediaLink.Editor.Testing
 {
     /// <summary>
     /// Editor-only test hook for driving AlmediaLinkSDK into any state (status, error,
-    /// notifications, in-game reward grants, native log) without going through a real device or
+    /// notifications, in-game reward grants, progress, native log) without going through a real device or
     /// backend. Lives in the AlmediaLink.Editor assembly (includePlatforms:["Editor"]) so
     /// the class does not exist in iOS/Android player builds at the assembly level
     /// host code that references it will fail to compile on a player target.
@@ -24,20 +26,21 @@ namespace AlmediaLink.Editor.Testing
         /// <see cref="AlmediaLinkSDK.ScreenAvailability"/> and their events reflect the new
         /// values synchronously. <paramref name="reason"/> models the wire reason and is
         /// meaningful only with <see cref="AlmediaStatus.NotAvailable"/> ("holdout" maps to
-        /// <see cref="AlmediaNotAvailableReason.Holdout"/>, anything else to Unknown). Omitted
+        /// <see cref="AlmediaNotAvailableReason.Holdout"/>, "disabled" to
+        /// <see cref="AlmediaNotAvailableReason.Disabled"/>, anything else to Unknown). Omitted
         /// availability flags default to (status == Linked), mirroring the happy-path native
         /// derivation; pass explicit values to model a linked player losing a screen.
         /// </summary>
         public static void EmitStatus(AlmediaStatus status, string reason = null,
             bool? canShowRewardHub = null, bool? canShowOffer = null)
-            => Mock().EmitStatus(status, reason, canShowRewardHub, canShowOffer);
+            => Mock().EmitStatus(Compat.ToNewApi(status), reason, canShowRewardHub, canShowOffer);
 
         /// <summary>
         /// Fires <see cref="AlmediaLinkSDK.OnErrorOccurred"/> with the given code and message.
         /// Use this to exercise error-handling UI under every <see cref="AlmediaErrorCode"/> value.
         /// </summary>
         public static void EmitError(AlmediaErrorCode code, string message)
-            => Mock().EmitError(code, message);
+            => Mock().EmitError(Compat.ToNewApi(code), message);
 
         /// <summary>
         /// Fires <see cref="AlmediaLinkSDK.OnLinkCompleted"/> with the current UTC timestamp.
@@ -55,7 +58,7 @@ namespace AlmediaLink.Editor.Testing
         {
             var bridge = Mock();
             var converted = items == null
-                ? Array.Empty<NotificationItem>()
+                ? Array.Empty<NewModels.NotificationItem>()
                 : Array.ConvertAll(items, ToItem);
             bridge.EmitNotifications(converted);
         }
@@ -78,13 +81,56 @@ namespace AlmediaLink.Editor.Testing
         {
             var bridge = Mock();
             var converted = rewards == null
-                ? Array.Empty<InGameRewardItem>()
+                ? Array.Empty<NewModels.InGameRewardItem>()
                 : Array.ConvertAll(rewards, ToRewardItem);
-            bridge.EmitInGameRewardGrant(new InGameRewardGrantResponse
+            bridge.EmitInGameRewardGrant(new NewModels.InGameRewardGrantResponse
             {
                 id = string.IsNullOrEmpty(id) ? Guid.NewGuid().ToString("N") : id,
                 timestamp = DateTime.UtcNow.ToString("o"),
                 rewards = converted
+            });
+        }
+
+        /// <summary>
+        /// Applies <paramref name="progress"/> as the latest snapshot. It uses the same bridge path as
+        /// the native plugins. <see cref="AlmediaLinkSDK.Progress"/> holds the snapshot and
+        /// <see cref="AlmediaLinkSDK.OnProgressUpdated"/> fires. Pass <c>null</c> to model native
+        /// clearing the snapshot with the stream token: the accessor becomes <c>null</c> and the event
+        /// fires with <c>null</c>. Pass a null <see cref="AlmediaProgress.Username"/> to model a
+        /// snapshot that clears the previous username.
+        /// </summary>
+        public static void EmitProgress(AlmediaProgress progress)
+            => Mock().EmitProgress(progress == null ? null : ToResponse(progress));
+
+        /// <summary>
+        /// Fires <see cref="AlmediaLinkSDK.OnTaskCompleted"/>. Delivery on a device is best-effort and
+        /// can repeat. Call this method twice with the same <paramref name="id"/> to reproduce a replay
+        /// and to test host-side deduplication. If <paramref name="id"/> is null or empty, the mock
+        /// generates one.
+        /// </summary>
+        public static void EmitTaskCompleted(string id, AlmediaCompletedTask task)
+        {
+            if (task == null) throw new ArgumentNullException(nameof(task));
+            Mock().EmitTaskCompleted(new NewModels.TaskCompletedResponse
+            {
+                id = IdOrNew(id),
+                task = ToItem(task)
+            });
+        }
+
+        /// <summary>
+        /// Fires <see cref="AlmediaLinkSDK.OnBalanceChanged"/> with the balance after the change and
+        /// the signed change. If <paramref name="id"/> is null or empty, the mock generates one.
+        /// </summary>
+        public static void EmitBalanceChanged(string id, AlmediaRewardPoints balance, AlmediaRewardPoints change)
+        {
+            if (balance == null) throw new ArgumentNullException(nameof(balance));
+            if (change == null) throw new ArgumentNullException(nameof(change));
+            Mock().EmitBalanceChanged(new NewModels.BalanceChangedResponse
+            {
+                id = IdOrNew(id),
+                balance = ToItem(balance),
+                change = ToItem(change)
             });
         }
 
@@ -94,7 +140,7 @@ namespace AlmediaLink.Editor.Testing
         /// <see cref="EmitScreenDismissed"/> to reproduce native's matched-pair contract.
         /// </summary>
         public static void EmitScreenPresented(AlmediaScreen screen)
-            => Mock().EmitScreenPresented(screen);
+            => Mock().EmitScreenPresented(Compat.ToNewApi(screen));
 
         /// <summary>
         /// Fires <see cref="AlmediaLinkSDK.OnScreenDismissed"/> for the given screen with the given
@@ -104,7 +150,7 @@ namespace AlmediaLink.Editor.Testing
         /// </summary>
         public static void EmitScreenDismissed(AlmediaScreen screen, InAppScreenResultType result,
             AlmediaErrorCode errorCode = AlmediaErrorCode.Unknown, string errorMessage = null)
-            => Mock().EmitScreenDismissed(screen, result, errorCode, errorMessage);
+            => Mock().EmitScreenDismissed(Compat.ToNewApi(screen), Compat.ToNewApi(result, errorCode, errorMessage));
 
         /// <summary>
         /// Compatibility shim: the SDK no longer shows an ATT pre-prompt. Still flips the mock into
@@ -123,7 +169,7 @@ namespace AlmediaLink.Editor.Testing
         /// Subscribers of <see cref="AlmediaLinkSDK.OnLog"/> receive it as if it had come from native.
         /// </summary>
         public static void EmitNativeLog(AlmediaLogLevel level, string message)
-            => Mock().EmitNativeLog(level, message);
+            => Mock().EmitNativeLog(Compat.ToNewApi(level), message);
 
         /// <summary>
         /// Stops any pending auto-simulate coroutine. The first call to any other Emit* method
@@ -145,7 +191,7 @@ namespace AlmediaLink.Editor.Testing
             return bridge;
         }
 
-        private static NotificationItem ToItem(MockNotification n) => new NotificationItem
+        private static NewModels.NotificationItem ToItem(MockNotification n) => new NewModels.NotificationItem
         {
             id = n.Id ?? "",
             title = n.Title ?? "",
@@ -155,10 +201,72 @@ namespace AlmediaLink.Editor.Testing
             iconUrl = n.IconUrl ?? ""
         };
 
-        private static InGameRewardItem ToRewardItem(MockInGameReward r) => new InGameRewardItem
+        private static NewModels.InGameRewardItem ToRewardItem(MockInGameReward r) => new NewModels.InGameRewardItem
         {
             amount = r.Amount,
             code = r.Code ?? ""
+        };
+
+        private static string IdOrNew(string id) => string.IsNullOrEmpty(id) ? Guid.NewGuid().ToString("N") : id;
+
+        private static NewModels.ProgressResponse ToResponse(AlmediaProgress p) => new NewModels.ProgressResponse
+        {
+            id = p.Id ?? "",
+            timestamp = p.Timestamp ?? "",
+            username = p.Username ?? "",
+            balance = ToItem(p.Balance),
+            earned = ToItem(p.Earned),
+            pending = ToItems(p.Pending),
+            completed = ToItems(p.Completed),
+            expired = ToItems(p.Expired)
+        };
+
+        private static NewModels.TaskItem[] ToItems(System.Collections.Generic.IReadOnlyList<AlmediaTask> tasks)
+        {
+            var items = new NewModels.TaskItem[tasks.Count];
+            for (int i = 0; i < items.Length; i++) items[i] = ToItem(tasks[i]);
+            return items;
+        }
+
+        private static NewModels.CompletedTaskItem[] ToItems(System.Collections.Generic.IReadOnlyList<AlmediaCompletedTask> tasks)
+        {
+            var items = new NewModels.CompletedTaskItem[tasks.Count];
+            for (int i = 0; i < items.Length; i++) items[i] = ToItem(tasks[i]);
+            return items;
+        }
+
+        private static NewModels.CompletedTaskItem ToItem(AlmediaCompletedTask c) => new NewModels.CompletedTaskItem
+        {
+            task = ToItem(c.Task),
+            completedAt = c.Timestamp ?? "",
+            actualReward = ToItem(c.ActualReward)
+        };
+
+        private static NewModels.TaskItem ToItem(AlmediaTask t) => new NewModels.TaskItem
+        {
+            id = t.Id ?? "",
+            kind = t.Kind ?? "",
+            title = t.Title ?? "",
+            reward = ToItem(t.Reward),
+            hasProgress = t.Progress != null,
+            progress = t.Progress == null
+                ? new NewModels.TaskProgressItem()
+                : new NewModels.TaskProgressItem { value = t.Progress.Value, target = t.Progress.Target },
+            rewardDropsAt = t.RewardDropsAtTimestamp ?? ""
+        };
+
+        private static NewModels.RewardPointsItem ToItem(AlmediaRewardPoints r) => new NewModels.RewardPointsItem
+        {
+            coins = r.Coins,
+            inPlayerCurrency = ToItem(r.InPlayerCurrency),
+            inUsd = ToItem(r.InUsd)
+        };
+
+        // decimal.ToString never uses exponent form, so this is the plain notation the natives send.
+        private static NewModels.MoneyItem ToItem(AlmediaMoney m) => new NewModels.MoneyItem
+        {
+            amount = m.Amount.ToString(CultureInfo.InvariantCulture),
+            currency = m.Currency ?? ""
         };
     }
 

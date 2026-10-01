@@ -2,6 +2,7 @@
     "name": "AlmediaLink.Editor",
     "rootNamespace": "AlmediaLink.Editor",
     "references": [
+        "GUID:f81ee22f9986b1d46b4a0692cb1dbd86",
         "GUID:80c0dae00df099e41bebdfdaf1603f3f"
     ],
     "includePlatforms": [
