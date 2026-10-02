@@ -8,7 +8,7 @@ namespace AlmediaLink.UI
 {
     internal static class EventSystemCheck
     {
-        private static readonly HashSet<int> WarnedThisFrame = new HashSet<int>();
+        private static readonly HashSet<MonoBehaviour> WarnedThisFrame = new HashSet<MonoBehaviour>();
         private static int _warnedFrame = -1;
 
         /// <summary>
@@ -17,7 +17,7 @@ namespace AlmediaLink.UI
         /// </summary>
         internal static void WarnIfMissing(MonoBehaviour ui, string uiName)
         {
-            ui.StartCoroutine(CheckNextFrame(ui.GetInstanceID(), uiName));
+            ui.StartCoroutine(CheckNextFrame(ui, uiName));
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -27,7 +27,7 @@ namespace AlmediaLink.UI
             _warnedFrame = -1;
         }
 
-        private static IEnumerator CheckNextFrame(int uiId, string uiName)
+        private static IEnumerator CheckNextFrame(MonoBehaviour ui, string uiName)
         {
             yield return null;
             if (EventSystem.current != null) yield break;
@@ -37,7 +37,7 @@ namespace AlmediaLink.UI
                 WarnedThisFrame.Clear();
                 _warnedFrame = Time.frameCount;
             }
-            if (!WarnedThisFrame.Add(uiId)) yield break;
+            if (!WarnedThisFrame.Add(ui)) yield break;
 
             AlmediaLog.Warning(
                 $"{uiName}: scene '{SceneManager.GetActiveScene().name}' has no active EventSystem, " +

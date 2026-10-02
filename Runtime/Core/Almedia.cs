@@ -7,7 +7,7 @@ namespace AlmediaSDK
 {
     public static class Almedia
     {
-        public static string Version => "1.3.0";
+        public static string Version => "1.3.1";
 
         /// <summary>
         /// The player's current status. Reads <see cref="AlmediaStatus.NotInitialized"/> until the
